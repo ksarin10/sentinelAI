@@ -1,0 +1,12 @@
+FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/worker/package.json apps/worker/package.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/sdk/package.json packages/sdk/package.json
+RUN npm install
+COPY . .
+RUN npm run prisma:generate && npm run build -w @sentinelai/shared && npm run build -w @sentinelai/worker
+CMD ["npm", "run", "start:prod", "-w", "@sentinelai/worker"]

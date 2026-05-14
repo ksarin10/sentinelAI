@@ -1,0 +1,28 @@
+{
+  "name": "sentinelai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Enterprise AI observability and evaluation platform.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev:api": "npm run start:dev -w @sentinelai/api",
+    "dev:web": "npm run dev -w @sentinelai/web",
+    "dev:worker": "npm run start:dev -w @sentinelai/worker",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "example:chatbot": "tsx examples/chatbot/support-bot.ts",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "prisma": "^5.19.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}
