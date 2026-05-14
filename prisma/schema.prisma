@@ -1,0 +1,115 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TraceStatus {
+  SUCCESS
+  ERROR
+  TIMEOUT
+}
+
+enum EvaluationStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  projects     Project[]
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String
+  description String?
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  apiKeys     ApiKey[]
+  traces      Trace[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([ownerId, slug])
+  @@index([ownerId])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  name       String
+  keyPrefix  String
+  keyHash    String    @unique
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([projectId])
+  @@index([keyPrefix])
+}
+
+model Trace {
+  id               String       @id @default(cuid())
+  externalId       String?
+  projectId        String
+  project          Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name             String
+  provider         String
+  model            String
+  prompt           String
+  response         String?
+  status           TraceStatus  @default(SUCCESS)
+  latencyMs        Int
+  promptTokens     Int          @default(0)
+  completionTokens Int          @default(0)
+  totalTokens      Int          @default(0)
+  costUsd          Decimal      @db.Decimal(12, 6)
+  metadata         Json?
+  startedAt        DateTime
+  endedAt          DateTime?
+  createdAt        DateTime     @default(now())
+  evaluations      Evaluation[]
+
+  @@index([projectId, createdAt])
+  @@index([externalId])
+  @@index([provider, model])
+}
+
+model Evaluation {
+  id        String           @id @default(cuid())
+  traceId   String
+  trace     Trace            @relation(fields: [traceId], references: [id], onDelete: Cascade)
+  status    EvaluationStatus @default(QUEUED)
+  reason    String?
+  scores    EvaluationScore[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([traceId])
+  @@index([status])
+}
+
+model EvaluationScore {
+  id           String     @id @default(cuid())
+  evaluationId String
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  metric       String
+  score        Float
+  details      Json?
+  createdAt    DateTime   @default(now())
+
+  @@unique([evaluationId, metric])
+}
