@@ -65,9 +65,58 @@ export type TraceRecord = {
   evaluations?: EvaluationRecord[];
 };
 
+export type ModelRecommendationRecord = {
+  taskName: string;
+  currentProvider: string;
+  currentModel: string;
+  recommendedProvider: string;
+  recommendedModel: string;
+  recommendationType: "REDUCE_COST" | string;
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  estimatedSavingsUsd: number;
+  estimatedSavingsPercent: number;
+  rationale: string[];
+  signals: {
+    traceCount: number;
+    currentAverageCostUsd: number;
+    currentAverageLatencyMs: number;
+    currentErrorRate: number;
+    averageSemanticSimilarity: number | null;
+    averageHallucinationRisk: number | null;
+    qualityThreshold: number;
+    riskLevel: "LOW" | "MEDIUM" | "HIGH";
+    optimizationGoal: string;
+  };
+};
+
+export type ModelMigrationRecord = {
+  provider: string;
+  model: string;
+  displayName: string;
+  status: string;
+  replacementProvider: string | null;
+  replacementModel: string | null;
+  retirementDate: string | null;
+  daysUntilRetirement: number | null;
+  readiness: "READY_TO_TEST" | "NEEDS_REPLACEMENT" | "URGENT" | "BLOCKED";
+  totalTraceCount: number;
+  totalCostUsd: number;
+  affectedTasks: Array<{
+    taskName: string;
+    traceCount: number;
+    averageLatencyMs: number;
+    errorRate: number;
+    averageSemanticSimilarity: number | null;
+    averageHallucinationRisk: number | null;
+  }>;
+  rationale: string[];
+};
+
 export type DashboardData = {
   project: ProjectRecord;
   summary: AnalyticsSummary;
   timeseries: AnalyticsPoint[];
   traces: TraceRecord[];
+  recommendations: ModelRecommendationRecord[];
+  modelMigrations: ModelMigrationRecord[];
 };

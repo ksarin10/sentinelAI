@@ -1,7 +1,7 @@
 "use client";
 
 import type { AnalyticsSummary } from "@sentinelai/shared";
-import { AlertTriangle, Clock, Coins, Gauge, Layers3, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowRight, Clock, Coins, Gauge, Layers3, RefreshCw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "../../components/app-shell";
@@ -11,7 +11,7 @@ import { TraceTable } from "../../components/trace-table";
 import { Button } from "../../components/ui/button";
 import { apiRequest } from "../../lib/api";
 import { getSelectedProjectId, getToken, saveSelectedProjectId } from "../../lib/auth";
-import type { DashboardData, ProjectRecord, TraceRecord } from "../../lib/types";
+import type { DashboardData, ModelMigrationRecord, ModelRecommendationRecord, ProjectRecord, TraceRecord } from "../../lib/types";
 
 const emptySummary: AnalyticsSummary = {
   traceCount: 0,
@@ -49,12 +49,14 @@ export default function DashboardPage() {
       }
       setProjectId(activeProject.id);
       saveSelectedProjectId(activeProject.id);
-      const [summary, timeseries, traces] = await Promise.all([
+      const [summary, timeseries, traces, recommendations, modelMigrations] = await Promise.all([
         apiRequest<AnalyticsSummary>(`/projects/${activeProject.id}/analytics/summary`, { token: authToken }),
         apiRequest<DashboardData["timeseries"]>(`/projects/${activeProject.id}/analytics/timeseries`, { token: authToken }),
-        apiRequest<TraceRecord[]>(`/projects/${activeProject.id}/traces`, { token: authToken })
+        apiRequest<TraceRecord[]>(`/projects/${activeProject.id}/traces`, { token: authToken }),
+        apiRequest<ModelRecommendationRecord[]>(`/projects/${activeProject.id}/recommendations`, { token: authToken }),
+        apiRequest<ModelMigrationRecord[]>(`/projects/${activeProject.id}/model-migrations`, { token: authToken })
       ]);
-      setData({ project: activeProject, summary, timeseries, traces });
+      setData({ project: activeProject, summary, timeseries, traces, recommendations, modelMigrations });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load dashboard");
     } finally {
@@ -147,6 +149,71 @@ export default function DashboardPage() {
               <div className="flex justify-between rounded-md bg-muted px-3 py-2"><span>Semantic avg</span><strong>{averageSemantic.toFixed(2)}</strong></div>
               <div className="flex justify-between rounded-md bg-muted px-3 py-2"><span>Hallucination risk</span><strong>{averageRisk.toFixed(2)}</strong></div>
               <div className="flex justify-between rounded-md bg-muted px-3 py-2"><span>Trace errors</span><strong>{Math.round(summary.errorRate * summary.traceCount)}</strong></div>
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-6 xl:grid-cols-2">
+          <div className="rounded-lg border border-border bg-white p-5 shadow-panel">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold">Model Recommendations</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Cheaper model experiments based on task health and catalog pricing.</p>
+              </div>
+              <div className="rounded-md bg-[#e8f7f4] px-2.5 py-1 text-xs font-semibold text-primary">{data?.recommendations.length ?? 0} open</div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {(data?.recommendations ?? []).slice(0, 3).map((recommendation) => (
+                <div key={`${recommendation.taskName}-${recommendation.currentModel}-${recommendation.recommendedModel}`} className="rounded-md border border-border bg-muted/60 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">{recommendation.taskName}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span>{recommendation.currentProvider}/{recommendation.currentModel}</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                        <span>{recommendation.recommendedProvider}/{recommendation.recommendedModel}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-semibold text-primary">{recommendation.estimatedSavingsPercent}%</div>
+                      <div className="text-xs text-muted-foreground">est. savings</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs text-muted-foreground">{recommendation.rationale[0]}</div>
+                </div>
+              ))}
+              {(data?.recommendations.length ?? 0) === 0 ? (
+                <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">No safe cost-saving recommendations yet. Send more healthy traces or seed more catalog models.</div>
+              ) : null}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-white p-5 shadow-panel">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-base font-semibold">Migration Readiness</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Retiring or deprecated models currently receiving project traffic.</p>
+              </div>
+              <div className="rounded-md bg-[#fff4ed] px-2.5 py-1 text-xs font-semibold text-accent">{data?.modelMigrations.length ?? 0} risks</div>
+            </div>
+            <div className="mt-5 space-y-3">
+              {(data?.modelMigrations ?? []).slice(0, 3).map((migration) => (
+                <div key={`${migration.provider}-${migration.model}`} className="rounded-md border border-border bg-muted/60 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">{migration.displayName}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{migration.totalTraceCount} traces across {migration.affectedTasks.length} task(s)</div>
+                    </div>
+                    <div className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-foreground">{migration.readiness.replaceAll("_", " ")}</div>
+                  </div>
+                  <div className="mt-3 text-xs text-muted-foreground">
+                    {migration.replacementProvider && migration.replacementModel
+                      ? `Test replacement: ${migration.replacementProvider}/${migration.replacementModel}`
+                      : "No replacement is recorded yet."}
+                  </div>
+                </div>
+              ))}
+              {(data?.modelMigrations.length ?? 0) === 0 ? (
+                <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">No retiring or deprecated model traffic detected for this project.</div>
+              ) : null}
             </div>
           </div>
         </div>
