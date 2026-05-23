@@ -55,6 +55,20 @@ export type AnalyticsPoint = {
   costUsd: number;
 };
 
+export type TaskModelAnalyticsPoint = {
+  taskName: string;
+  provider: string;
+  model: string;
+  traceCount: number;
+  averageLatencyMs: number;
+  totalTokens: number;
+  totalCostUsd: number;
+  averageCostUsd: number;
+  errorRate: number;
+  averageSemanticSimilarity: number | null;
+  averageHallucinationRisk: number | null;
+};
+
 export type EvaluationScoreDto = {
   metric: "semantic_similarity" | "hallucination_risk" | string;
   score: number;

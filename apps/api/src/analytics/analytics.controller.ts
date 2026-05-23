@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { AnalyticsService } from "./analytics.service";
@@ -16,5 +16,18 @@ export class AnalyticsController {
   @Get("timeseries")
   timeseries(@CurrentUser() user: { sub: string }, @Param("projectId") projectId: string) {
     return this.analytics.timeseries(user.sub, projectId);
+  }
+
+  @Get("task-models")
+  taskModels(
+    @CurrentUser() user: { sub: string },
+    @Param("projectId") projectId: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("taskName") taskName?: string,
+    @Query("provider") provider?: string,
+    @Query("model") model?: string
+  ) {
+    return this.analytics.taskModels(user.sub, projectId, { from, to, taskName, provider, model });
   }
 }
