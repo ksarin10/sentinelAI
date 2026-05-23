@@ -7,6 +7,23 @@ export type TokenUsage = {
   totalTokens: number;
 };
 
+export type TaskTraceMetadata = {
+  version?: string;
+  inputClass?: string;
+  outputClass?: string;
+  riskLevel?: "LOW" | "MEDIUM" | "HIGH";
+};
+
+export type ModelExperimentMetadata = {
+  experimentId?: string;
+  experimentName?: string;
+  variant?: string;
+  baselineProvider?: string;
+  baselineModel?: string;
+  candidateProvider?: string;
+  candidateModel?: string;
+};
+
 export type TraceMetadata = {
   temperature?: number;
   topP?: number;
@@ -14,6 +31,8 @@ export type TraceMetadata = {
   sessionId?: string;
   tags?: string[];
   environment?: "development" | "staging" | "production" | string;
+  task?: TaskTraceMetadata;
+  experiment?: ModelExperimentMetadata;
   [key: string]: unknown;
 };
 

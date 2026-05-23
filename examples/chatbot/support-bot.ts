@@ -136,6 +136,20 @@ async function main() {
       source: "examples/chatbot/support-bot.ts",
       sessionId: `example-${Date.now()}`,
       userId: "example-user"
+    },
+    task: {
+      version: "v1",
+      inputClass: "customer_support_question",
+      outputClass: "support_next_steps",
+      riskLevel: "MEDIUM"
+    },
+    experiment: {
+      experimentId: "support-bot-model-routing",
+      variant: result.model === "gpt-4.1-mini" ? "candidate" : "baseline",
+      baselineProvider: "openai",
+      baselineModel: "gpt-4.1",
+      candidateProvider: "openai",
+      candidateModel: "gpt-4.1-mini"
     }
   });
 
