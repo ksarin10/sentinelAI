@@ -5,6 +5,7 @@ import { AnalyticsModule } from "./analytics/analytics.module";
 import { AuthModule } from "./auth/auth.module";
 import { EvaluationsModule } from "./evaluations/evaluations.module";
 import { IngestModule } from "./ingest/ingest.module";
+import { ModelCatalogModule } from "./model-catalog/model-catalog.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { TracesModule } from "./traces/traces.module";
@@ -27,6 +28,7 @@ import { UsersModule } from "./users/users.module";
     TracesModule,
     IngestModule,
     EvaluationsModule,
+    ModelCatalogModule,
     AnalyticsModule
   ]
 })

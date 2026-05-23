@@ -9,7 +9,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "tsx test/task-model-analytics.test.ts && tsx test/evaluation-jobs.test.ts",
+    "test": "tsx test/task-model-analytics.test.ts && tsx test/evaluation-jobs.test.ts && tsx test/model-catalog.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
