@@ -1,0 +1,32 @@
+import { Injectable } from "@nestjs/common";
+import { AnalyticsService } from "../analytics/analytics.service";
+import { ModelCatalogService } from "../model-catalog/model-catalog.service";
+import { PrismaService } from "../prisma/prisma.service";
+import { buildModelRecommendations } from "./recommendation-engine";
+
+@Injectable()
+export class RecommendationsService {
+  constructor(
+    private readonly analytics: AnalyticsService,
+    private readonly modelCatalog: ModelCatalogService,
+    private readonly prisma: PrismaService
+  ) {}
+
+  async list(ownerId: string, projectId: string) {
+    const [taskModels, catalog, profiles] = await Promise.all([
+      this.analytics.taskModels(ownerId, projectId),
+      this.modelCatalog.list({ status: "ACTIVE" }),
+      this.prisma.taskProfile.findMany({
+        where: { projectId },
+        select: {
+          taskName: true,
+          riskLevel: true,
+          qualityThreshold: true,
+          optimizationGoal: true
+        }
+      })
+    ]);
+
+    return buildModelRecommendations(taskModels, catalog, profiles);
+  }
+}

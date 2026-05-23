@@ -8,6 +8,7 @@ import { IngestModule } from "./ingest/ingest.module";
 import { ModelCatalogModule } from "./model-catalog/model-catalog.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProjectsModule } from "./projects/projects.module";
+import { RecommendationsModule } from "./recommendations/recommendations.module";
 import { TracesModule } from "./traces/traces.module";
 import { UsersModule } from "./users/users.module";
 
@@ -29,7 +30,8 @@ import { UsersModule } from "./users/users.module";
     IngestModule,
     EvaluationsModule,
     ModelCatalogModule,
-    AnalyticsModule
+    AnalyticsModule,
+    RecommendationsModule
   ]
 })
 export class AppModule {}
