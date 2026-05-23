@@ -20,6 +20,26 @@ enum EvaluationStatus {
   FAILED
 }
 
+enum ModelLifecycleStatus {
+  ACTIVE
+  RETIRING
+  DEPRECATED
+  RETIRED
+}
+
+enum TaskRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum OptimizationGoal {
+  BALANCED
+  REDUCE_COST
+  REDUCE_LATENCY
+  MAXIMIZE_QUALITY
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -31,19 +51,58 @@ model User {
 }
 
 model Project {
-  id          String    @id @default(cuid())
-  name        String
-  slug        String
-  description String?
-  ownerId     String
-  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  apiKeys     ApiKey[]
-  traces      Trace[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id           String        @id @default(cuid())
+  name         String
+  slug         String
+  description  String?
+  ownerId      String
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  apiKeys      ApiKey[]
+  traces       Trace[]
+  taskProfiles TaskProfile[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@unique([ownerId, slug])
   @@index([ownerId])
+}
+
+model ModelCatalog {
+  id                    String               @id @default(cuid())
+  provider              String
+  model                 String
+  displayName           String
+  status                ModelLifecycleStatus @default(ACTIVE)
+  replacementProvider   String?
+  replacementModel      String?
+  retirementDate        DateTime?
+  inputTokenPricePer1M  Decimal              @db.Decimal(12, 6)
+  outputTokenPricePer1M Decimal              @db.Decimal(12, 6)
+  contextWindow         Int?
+  capabilities          String[]
+  notes                 String?
+  catalogUpdatedAt      DateTime             @default(now())
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@unique([provider, model])
+  @@index([status])
+}
+
+model TaskProfile {
+  id               String           @id @default(cuid())
+  projectId        String
+  project          Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskName         String
+  riskLevel        TaskRiskLevel    @default(MEDIUM)
+  qualityThreshold Float            @default(0.8)
+  optimizationGoal OptimizationGoal @default(BALANCED)
+  notes            String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([projectId, taskName])
+  @@index([projectId, riskLevel])
 }
 
 model ApiKey {
@@ -89,14 +148,14 @@ model Trace {
 }
 
 model Evaluation {
-  id        String           @id @default(cuid())
+  id        String            @id @default(cuid())
   traceId   String
-  trace     Trace            @relation(fields: [traceId], references: [id], onDelete: Cascade)
-  status    EvaluationStatus @default(QUEUED)
+  trace     Trace             @relation(fields: [traceId], references: [id], onDelete: Cascade)
+  status    EvaluationStatus  @default(QUEUED)
   reason    String?
   scores    EvaluationScore[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
 
   @@index([traceId])
   @@index([status])

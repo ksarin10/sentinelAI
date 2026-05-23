@@ -60,3 +60,5 @@ export type EvaluationScoreDto = {
   score: number;
   details?: Record<string, unknown>;
 };
+
+export * from "./model-catalog";
