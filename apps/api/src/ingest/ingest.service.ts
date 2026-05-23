@@ -2,12 +2,15 @@ import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
 import { Prisma, Project } from "@prisma/client";
 import { Queue } from "bullmq";
+import { queueTraceEvaluation } from "../evaluations/evaluation-jobs";
+import { PrismaService } from "../prisma/prisma.service";
 import { TracesRepository } from "../traces/traces.repository";
 import { IngestTraceDto } from "./dto";
 
 @Injectable()
 export class IngestService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly traces: TracesRepository,
     @InjectQueue("evaluations") private readonly evaluationsQueue: Queue
   ) {}
@@ -35,7 +38,7 @@ export class IngestService {
       endedAt: dto.endedAt ? new Date(dto.endedAt) : new Date()
     });
 
-    const job = await this.evaluationsQueue.add("evaluate-trace", { traceId: trace.id }, { attempts: 3, backoff: { type: "exponential", delay: 5000 } });
-    return { traceId: trace.id, evaluationId: String(job.id), queued: true };
+    const { evaluation } = await queueTraceEvaluation(this.prisma, this.evaluationsQueue, trace.id);
+    return { traceId: trace.id, evaluationId: evaluation.id, queued: true };
   }
 }

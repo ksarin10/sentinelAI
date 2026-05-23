@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { Queue } from "bullmq";
 import { randomUUID } from "crypto";
 import { createApiKey } from "../common/crypto";
+import { queueTraceEvaluation } from "../evaluations/evaluation-jobs";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateApiKeyDto, CreateProjectDto } from "./dto";
 import { ProjectsRepository } from "./projects.repository";
@@ -115,7 +116,7 @@ export class ProjectsService {
         endedAt
       }
     });
-    const job = await this.evaluationsQueue.add("evaluate-trace", { traceId: trace.id }, { attempts: 3, backoff: { type: "exponential", delay: 5000 } });
-    return { trace, evaluationJobId: String(job.id), queued: true };
+    const { evaluation, job } = await queueTraceEvaluation(this.prisma, this.evaluationsQueue, trace.id);
+    return { trace, evaluationId: evaluation.id, evaluationJobId: String(job.id), queued: true };
   }
 }

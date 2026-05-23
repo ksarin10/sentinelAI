@@ -1,21 +1,23 @@
 import { PrismaClient } from "@prisma/client";
 import { Job, Worker } from "bullmq";
 import IORedis from "ioredis";
+import { assertEvaluationJobData, EvaluationJobData } from "./evaluation-job";
 import { hallucinationRisk, semanticSimilarity } from "./scoring";
 
 const prisma = new PrismaClient();
 const connection = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", { maxRetriesPerRequest: null });
 
-async function runEvaluation(job: Job<{ traceId: string; evaluationId?: string }>) {
-  const trace = await prisma.trace.findUnique({ where: { id: job.data.traceId } });
+async function runEvaluation(job: Job<EvaluationJobData>) {
+  const data = assertEvaluationJobData(job.data);
+  const trace = await prisma.trace.findUnique({ where: { id: data.traceId } });
   if (!trace) {
-    throw new Error(`Trace ${job.data.traceId} not found`);
+    throw new Error(`Trace ${data.traceId} not found`);
   }
 
-  const evaluation =
-    job.data.evaluationId
-      ? await prisma.evaluation.update({ where: { id: job.data.evaluationId }, data: { status: "RUNNING" } })
-      : await prisma.evaluation.create({ data: { traceId: trace.id, status: "RUNNING" } });
+  const evaluation = await prisma.evaluation.update({
+    where: { id: data.evaluationId },
+    data: { status: "RUNNING", reason: null }
+  });
 
   const semantic = semanticSimilarity(trace.prompt, trace.response ?? "");
   const hallucination = hallucinationRisk(trace.prompt, trace.response ?? "");
@@ -43,7 +45,7 @@ worker.on("completed", (job) => {
 
 worker.on("failed", async (job, error) => {
   console.error(`Evaluation job ${job?.id} failed`, error);
-  if (job?.data.evaluationId) {
+  if (job?.data?.evaluationId) {
     await prisma.evaluation.update({
       where: { id: job.data.evaluationId },
       data: { status: "FAILED", reason: error.message }
