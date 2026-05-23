@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, KeyRound, Plus, RefreshCw, Send, Waypoints } from "lucide-react";
+import { Copy, Database, KeyRound, Plus, RefreshCw, Send, Waypoints } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "../../components/app-shell";
@@ -27,6 +27,7 @@ export default function ProjectsPage() {
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [creatingDemo, setCreatingDemo] = useState(false);
+  const [seedingDemo, setSeedingDemo] = useState(false);
   const [ready, setReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
@@ -106,6 +107,27 @@ export default function ProjectsPage() {
       await loadProjects(token);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create API key");
+    }
+  }
+
+  async function seedDemoAnalytics() {
+    if (!token || !selectedProject) {
+      return;
+    }
+    setError("");
+    setNotice("");
+    setSeedingDemo(true);
+    try {
+      const result = await apiRequest<{ tracesCreated: number }>(`/projects/${selectedProject.id}/seed-demo-analytics`, {
+        token,
+        method: "POST"
+      });
+      setNotice(`Loaded ${result.tracesCreated} mock traces for recommendations and migration demos. Open the dashboard to review them.`);
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load demo analytics");
+    } finally {
+      setSeedingDemo(false);
     }
   }
 
@@ -199,16 +221,30 @@ export default function ProjectsPage() {
                   <Input value={keyName} onChange={(event) => setKeyName(event.target.value)} placeholder="Server ingestion key" required />
                   <Button>Create key</Button>
                 </form>
-                <div className="mt-4 rounded-md border border-border bg-muted p-4">
-                  <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-                    <div>
-                      <div className="text-sm font-medium">Create a sample trace</div>
-                      <div className="text-sm text-muted-foreground">Writes a real trace to this project and queues evaluation scoring.</div>
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-md border border-border bg-muted p-4">
+                    <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                      <div>
+                        <div className="text-sm font-medium">Create a sample trace</div>
+                        <div className="text-sm text-muted-foreground">Writes one live trace and queues evaluation scoring.</div>
+                      </div>
+                      <Button type="button" onClick={createDemoTrace} disabled={creatingDemo}>
+                        <Send className="mr-2 h-4 w-4" />
+                        {creatingDemo ? "Sending..." : "Send test trace"}
+                      </Button>
                     </div>
-                    <Button type="button" onClick={createDemoTrace} disabled={creatingDemo}>
-                      <Send className="mr-2 h-4 w-4" />
-                      {creatingDemo ? "Sending..." : "Send test trace"}
-                    </Button>
+                  </div>
+                  <div className="rounded-md border border-teal-200 bg-teal-50/70 p-4">
+                    <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                      <div>
+                        <div className="text-sm font-medium">Load demo analytics</div>
+                        <div className="text-sm text-muted-foreground">Seeds mock catalog, cost recommendations, and migration readiness data for dashboard testing.</div>
+                      </div>
+                      <Button type="button" className="bg-white text-foreground ring-1 ring-teal-300" onClick={seedDemoAnalytics} disabled={seedingDemo}>
+                        <Database className="mr-2 h-4 w-4" />
+                        {seedingDemo ? "Loading..." : "Load demo data"}
+                      </Button>
+                    </div>
                   </div>
                 </div>
                 {newSecret ? (

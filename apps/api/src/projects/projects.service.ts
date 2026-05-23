@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { Queue } from "bullmq";
 import { randomUUID } from "crypto";
 import { createApiKey } from "../common/crypto";
+import { seedOptimizationDemo } from "../demo/seed-optimization-demo";
 import { queueTraceEvaluation } from "../evaluations/evaluation-jobs";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateApiKeyDto, CreateProjectDto } from "./dto";
@@ -118,5 +119,10 @@ export class ProjectsService {
     });
     const { evaluation, job } = await queueTraceEvaluation(this.prisma, this.evaluationsQueue, trace.id);
     return { trace, evaluationId: evaluation.id, evaluationJobId: String(job.id), queued: true };
+  }
+
+  async seedDemoAnalytics(ownerId: string, projectId: string) {
+    await this.get(projectId, ownerId);
+    return seedOptimizationDemo(this.prisma, projectId);
   }
 }

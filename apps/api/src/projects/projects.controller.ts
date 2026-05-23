@@ -43,4 +43,9 @@ export class ProjectsController {
   createDemoTrace(@CurrentUser() user: { sub: string }, @Param("id") id: string) {
     return this.projects.createDemoTrace(user.sub, id);
   }
+
+  @Post(":id/seed-demo-analytics")
+  seedDemoAnalytics(@CurrentUser() user: { sub: string }, @Param("id") id: string) {
+    return this.projects.seedDemoAnalytics(user.sub, id);
+  }
 }
