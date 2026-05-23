@@ -6,6 +6,7 @@ import { AuthModule } from "./auth/auth.module";
 import { EvaluationsModule } from "./evaluations/evaluations.module";
 import { IngestModule } from "./ingest/ingest.module";
 import { ModelCatalogModule } from "./model-catalog/model-catalog.module";
+import { ModelMigrationsModule } from "./model-migrations/model-migrations.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { RecommendationsModule } from "./recommendations/recommendations.module";
@@ -30,6 +31,7 @@ import { UsersModule } from "./users/users.module";
     IngestModule,
     EvaluationsModule,
     ModelCatalogModule,
+    ModelMigrationsModule,
     AnalyticsModule,
     RecommendationsModule
   ]
