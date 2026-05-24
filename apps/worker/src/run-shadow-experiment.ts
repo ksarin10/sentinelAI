@@ -2,12 +2,17 @@ import { PrismaClient, ShadowExperiment } from "@prisma/client";
 import { evaluateShadowExperimentCompletion, evaluateShadowRun } from "./shadow-experiment-eval";
 import { resolveProviderApiKey } from "./resolve-provider-api-key";
 import { replayCandidatePrompt } from "./shadow-replay";
-import { hallucinationRisk, semanticSimilarity } from "./scoring";
+import { scoreShadowCandidate } from "./shadow-scoring";
 
 const SAMPLE_SIZE = 10;
 
 function maxHallucinationRisk() {
   return 0.25;
+}
+
+function shadowEarlyStopFailures() {
+  const parsed = Number(process.env.SHADOW_EARLY_STOP_FAILURES ?? 5);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5;
 }
 
 async function markExperimentFromProductionTraffic(prisma: PrismaClient, experiment: ShadowExperiment) {
@@ -122,10 +127,18 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
 
   let passedRuns = 0;
   let failedRuns = 0;
+  let consecutiveFailures = 0;
+  const earlyStopAfter = shadowEarlyStopFailures();
   const semanticTotals: number[] = [];
   const hallucinationTotals: number[] = [];
+  let stoppedEarly = false;
 
   for (const trace of traces) {
+    if (failedRuns >= earlyStopAfter && passedRuns === 0) {
+      stoppedEarly = true;
+      break;
+    }
+
     const baselineResponse = trace.response ?? "";
     const candidateResponse = await replayCandidatePrompt(
       trace.prompt,
@@ -137,17 +150,23 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
 
     if (!candidateResponse) {
       failedRuns += 1;
+      consecutiveFailures += 1;
       continue;
     }
 
-    const semanticScore = semanticSimilarity(trace.prompt, candidateResponse).score;
-    const hallucinationScore = hallucinationRisk(trace.prompt, candidateResponse).score;
+    const { semantic: semanticScore, hallucination: hallucinationScore } = await scoreShadowCandidate(
+      trace.prompt,
+      candidateResponse,
+      trace.metadata
+    );
     const result = evaluateShadowRun(semanticScore, hallucinationScore, experiment.qualityThreshold, maxHallucinationRisk());
 
     if (result.passed) {
       passedRuns += 1;
+      consecutiveFailures = 0;
     } else {
       failedRuns += 1;
+      consecutiveFailures += 1;
     }
 
     semanticTotals.push(semanticScore);
@@ -184,7 +203,9 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
       averageCandidateHallucination,
       reason: completion.passed
         ? "Background shadow verification passed on sampled traffic."
-        : "Background shadow verification did not meet the quality threshold.",
+        : stoppedEarly
+          ? `Stopped early after ${failedRuns} failed replays without a passing sample.`
+          : "Background shadow verification did not meet the quality threshold.",
       completedAt: new Date()
     }
   });
