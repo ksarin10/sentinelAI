@@ -12,6 +12,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { ProviderCredentialsModule } from "./provider-credentials/provider-credentials.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { RecommendationsModule } from "./recommendations/recommendations.module";
+import { TaskProfilesModule } from "./task-profiles/task-profiles.module";
 import { TracesModule } from "./traces/traces.module";
 import { UsersModule } from "./users/users.module";
 
@@ -38,7 +39,8 @@ import { UsersModule } from "./users/users.module";
     ModelCatalogModule,
     ModelMigrationsModule,
     AnalyticsModule,
-    RecommendationsModule
+    RecommendationsModule,
+    TaskProfilesModule
   ]
 })
 export class AppModule {}

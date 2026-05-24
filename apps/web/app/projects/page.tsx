@@ -9,7 +9,7 @@ import { Card } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { apiRequest } from "../../lib/api";
 import { getSelectedProjectId, getToken, saveSelectedProjectId } from "../../lib/auth";
-import type { ApiKeyRecord, ProjectRecord, ProviderCredentialRecord } from "../../lib/types";
+import type { ApiKeyRecord, ProjectRecord, ProviderCredentialRecord, TaskProfileRecord } from "../../lib/types";
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -25,6 +25,12 @@ export default function ProjectsPage() {
   const [providerCredentials, setProviderCredentials] = useState<ProviderCredentialRecord[]>([]);
   const [providerName, setProviderName] = useState("openai");
   const [providerApiKey, setProviderApiKey] = useState("");
+  const [taskProfiles, setTaskProfiles] = useState<TaskProfileRecord[]>([]);
+  const [taskName, setTaskName] = useState("support.answer");
+  const [taskRiskLevel, setTaskRiskLevel] = useState<TaskProfileRecord["riskLevel"]>("MEDIUM");
+  const [taskQualityThreshold, setTaskQualityThreshold] = useState("0.8");
+  const [taskOptimizationGoal, setTaskOptimizationGoal] = useState<TaskProfileRecord["optimizationGoal"]>("REDUCE_COST");
+  const [taskNotes, setTaskNotes] = useState("");
   const [newSecret, setNewSecret] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -43,6 +49,15 @@ export default function ProjectsPage() {
     setProviderCredentials(data);
   }
 
+  async function loadTaskProfiles(projectId: string, authToken: string) {
+    const data = await apiRequest<TaskProfileRecord[]>(`/projects/${projectId}/task-profiles`, { token: authToken });
+    setTaskProfiles(data);
+  }
+
+  async function loadProjectSettings(projectId: string, authToken: string) {
+    await Promise.all([loadProviderCredentials(projectId, authToken), loadTaskProfiles(projectId, authToken)]);
+  }
+
   async function loadProjects(authToken: string | null = token) {
     if (!authToken) {
       setLoading(false);
@@ -59,9 +74,10 @@ export default function ProjectsPage() {
       setSelectedProjectId(nextProjectId);
       if (nextProjectId) {
         saveSelectedProjectId(nextProjectId);
-        await loadProviderCredentials(nextProjectId, authToken);
+        await loadProjectSettings(nextProjectId, authToken);
       } else {
         setProviderCredentials([]);
+        setTaskProfiles([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load projects");
@@ -99,6 +115,32 @@ export default function ProjectsPage() {
       setDescription("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create project");
+    }
+  }
+
+  async function saveTaskProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !selectedProject) {
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest<TaskProfileRecord>(`/projects/${selectedProject.id}/task-profiles`, {
+        token,
+        method: "POST",
+        body: {
+          taskName,
+          riskLevel: taskRiskLevel,
+          qualityThreshold: Number(taskQualityThreshold),
+          optimizationGoal: taskOptimizationGoal,
+          notes: taskNotes || undefined
+        }
+      });
+      await loadTaskProfiles(selectedProject.id, token);
+      setNotice(`Saved task profile for ${taskName}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save task profile");
     }
   }
 
@@ -234,7 +276,7 @@ export default function ProjectsPage() {
                   setSelectedProjectId(project.id);
                   saveSelectedProjectId(project.id);
                   if (token) {
-                    void loadProviderCredentials(project.id, token);
+                    void loadProjectSettings(project.id, token);
                   }
                 }}
                 className={`block w-full border-t border-border px-4 py-3 text-left text-sm ${project.id === selectedProject?.id ? "bg-muted" : "bg-white hover:bg-muted"}`}
@@ -296,6 +338,65 @@ export default function ProjectsPage() {
                       <div key={credential.provider} className="flex items-center justify-between rounded-md border border-border bg-white px-3 py-2 text-sm">
                         <span className="font-medium">{credential.provider}</span>
                         <span className="text-muted-foreground">{credential.keyHint}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-6 rounded-md border border-border bg-muted/30 p-4">
+                  <h3 className="text-sm font-semibold">Task profiles</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Configure quality and cost goals per trace task name. Recommendations and shadow checks use these thresholds.
+                  </p>
+                  <form className="mt-3 grid gap-3" onSubmit={saveTaskProfile}>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Input value={taskName} onChange={(event) => setTaskName(event.target.value)} placeholder="support.answer" required />
+                      <select
+                        className="rounded-md border border-border bg-white px-3 py-2 text-sm"
+                        value={taskRiskLevel}
+                        onChange={(event) => setTaskRiskLevel(event.target.value as TaskProfileRecord["riskLevel"])}
+                      >
+                        <option value="LOW">LOW risk</option>
+                        <option value="MEDIUM">MEDIUM risk</option>
+                        <option value="HIGH">HIGH risk</option>
+                      </select>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <Input
+                        value={taskQualityThreshold}
+                        onChange={(event) => setTaskQualityThreshold(event.target.value)}
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        placeholder="Quality threshold"
+                        required
+                      />
+                      <select
+                        className="rounded-md border border-border bg-white px-3 py-2 text-sm md:col-span-2"
+                        value={taskOptimizationGoal}
+                        onChange={(event) =>
+                          setTaskOptimizationGoal(event.target.value as TaskProfileRecord["optimizationGoal"])
+                        }
+                      >
+                        <option value="BALANCED">Balanced</option>
+                        <option value="REDUCE_COST">Reduce cost</option>
+                        <option value="REDUCE_LATENCY">Reduce latency</option>
+                        <option value="MAXIMIZE_QUALITY">Maximize quality</option>
+                      </select>
+                    </div>
+                    <Input value={taskNotes} onChange={(event) => setTaskNotes(event.target.value)} placeholder="Optional notes" />
+                    <Button type="submit">Save task profile</Button>
+                  </form>
+                  <div className="mt-3 space-y-2">
+                    {taskProfiles.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No task profiles yet. Defaults apply per task.</div>
+                    ) : null}
+                    {taskProfiles.map((profile) => (
+                      <div key={profile.id} className="rounded-md border border-border bg-white px-3 py-2 text-sm">
+                        <div className="font-medium">{profile.taskName}</div>
+                        <div className="text-muted-foreground">
+                          {profile.riskLevel} · quality ≥ {profile.qualityThreshold} · {profile.optimizationGoal.replaceAll("_", " ").toLowerCase()}
+                        </div>
                       </div>
                     ))}
                   </div>

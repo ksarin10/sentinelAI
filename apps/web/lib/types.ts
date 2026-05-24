@@ -8,6 +8,18 @@ export type AuthResponse = {
   };
 };
 
+export type TaskProfileRecord = {
+  id: string;
+  projectId: string;
+  taskName: string;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  qualityThreshold: number;
+  optimizationGoal: "BALANCED" | "REDUCE_COST" | "REDUCE_LATENCY" | "MAXIMIZE_QUALITY";
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ProviderCredentialRecord = {
   provider: string;
   keyHint: string;
