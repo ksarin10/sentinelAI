@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { AuthModule } from "./auth/auth.module";
 import { EvaluationsModule } from "./evaluations/evaluations.module";
+import { HealthModule } from "./health/health.module";
 import { IngestModule } from "./ingest/ingest.module";
 import { ModelCatalogModule } from "./model-catalog/model-catalog.module";
 import { ModelMigrationsModule } from "./model-migrations/model-migrations.module";
@@ -26,6 +27,7 @@ import { UsersModule } from "./users/users.module";
     BullModule.registerQueue({ name: "evaluations" }),
     BullModule.registerQueue({ name: "shadow-experiments" }),
     PrismaModule,
+    HealthModule,
     UsersModule,
     AuthModule,
     ProjectsModule,

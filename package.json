@@ -14,6 +14,7 @@
     "dev:worker": "npm run start:dev -w @sentinelai/worker",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "model-catalog:seed": "tsx prisma/seed-model-catalog.ts",
