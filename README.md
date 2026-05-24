@@ -66,6 +66,47 @@ npm run dev:web
 
 The web app runs on `http://localhost:3000`; the API runs on `http://localhost:4000/api`.
 
+### Environment variables
+
+Copy `.env.example` to `.env` at the repo root. For the Next.js dashboard, also copy the `NEXT_PUBLIC_*` values into `apps/web/.env.local`.
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis for BullMQ workers |
+| `JWT_SECRET` | Auth token signing secret |
+| `NEXT_PUBLIC_API_URL` | Web app API base (default `http://localhost:4000`) |
+| `CORS_ORIGINS` | Comma-separated browser origins allowed to call the API (default `http://localhost:3000`) |
+| `RUN_CATALOG_SYNC_ON_START` | When `true`, Docker API entrypoint syncs the model catalog after migrations |
+| `EVAL_JUDGE_ENABLED` | Set `true` to score traces and shadow replays with the OpenAI judge |
+| `EVAL_JUDGE_MODEL` | Judge model id (default `gpt-4.1-mini`) |
+| `OPENAI_API_KEY` | Required when judge is enabled |
+| `SHADOW_REPLAY_MODE` | `simulate` locally or `api` for live provider replay |
+| `SHADOW_MIN_SAVINGS_USD` | Skip shadow jobs below this estimated savings (default `1`) |
+| `SHADOW_EARLY_STOP_FAILURES` | Stop replay after this many failures with zero passes (default `5`) |
+| `PROVIDER_CREDENTIALS_SECRET` | Encrypts per-project LLM provider keys |
+
+### Docker API startup
+
+The API container runs `prisma migrate deploy`, optionally `npm run model-catalog:sync`, then starts NestJS. Compose example:
+
+```bash
+docker compose up -d postgres redis
+docker compose up --build api worker web
+```
+
+Set `CORS_ORIGINS=http://localhost:3000` on the API service when using the bundled web container.
+
+### Smoke test
+
+With the API running locally:
+
+```bash
+npm run smoke
+```
+
+Override `API_URL`, `SMOKE_EMAIL`, or `SMOKE_PASSWORD` as needed.
+
 ## Roadmap
 
 - Prompt versioning

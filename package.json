@@ -21,6 +21,7 @@
     "model-catalog:sync": "tsx prisma/seed-model-catalog.ts",
     "demo:seed": "tsx prisma/seed-optimization-demo.ts",
     "example:chatbot": "tsx examples/chatbot/support-bot.ts",
+    "smoke": "bash scripts/smoke.sh",
     "format": "prettier --write ."
   },
   "devDependencies": {

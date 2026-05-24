@@ -9,5 +9,6 @@ COPY packages/sdk/package.json packages/sdk/package.json
 RUN npm install
 COPY . .
 RUN npm run prisma:generate && npm run build -w @sentinelai/shared && npm run build -w @sentinelai/api
+RUN chmod +x scripts/docker-api-entrypoint.sh
 EXPOSE 4000
-CMD ["npm", "run", "start:prod", "-w", "@sentinelai/api"]
+ENTRYPOINT ["scripts/docker-api-entrypoint.sh"]

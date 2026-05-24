@@ -34,6 +34,8 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: change-me-in-production
       API_PORT: 4000
+      CORS_ORIGINS: http://localhost:3000
+      RUN_CATALOG_SYNC_ON_START: "true"
     ports:
       - "4000:4000"
     depends_on:
