@@ -2,14 +2,17 @@ import { Injectable } from "@nestjs/common";
 import { AnalyticsService } from "../analytics/analytics.service";
 import { ModelCatalogService } from "../model-catalog/model-catalog.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { buildModelRecommendations } from "./recommendation-engine";
+import { findRecommendationCandidates } from "./recommendation-candidates";
+import { buildVerifiedRecommendations } from "../shadow-experiments/shadow-experiment-engine";
+import { ShadowExperimentsService } from "../shadow-experiments/shadow-experiments.service";
 
 @Injectable()
 export class RecommendationsService {
   constructor(
     private readonly analytics: AnalyticsService,
     private readonly modelCatalog: ModelCatalogService,
-    private readonly prisma: PrismaService
+    private readonly prisma: PrismaService,
+    private readonly shadowExperiments: ShadowExperimentsService
   ) {}
 
   async list(ownerId: string, projectId: string) {
@@ -27,6 +30,10 @@ export class RecommendationsService {
       })
     ]);
 
-    return buildModelRecommendations(taskModels, catalog, profiles);
+    const candidates = findRecommendationCandidates(taskModels, catalog, profiles);
+    await this.shadowExperiments.syncCandidates(projectId, candidates);
+    const passedExperiments = await this.shadowExperiments.listPassed(projectId);
+
+    return buildVerifiedRecommendations(candidates, passedExperiments, catalog);
   }
 }

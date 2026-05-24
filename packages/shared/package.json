@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsx test/model-catalog.test.ts",
+    "test": "tsx test/model-catalog.test.ts && tsx test/shadow-experiment.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }

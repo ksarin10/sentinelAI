@@ -9,28 +9,23 @@ export type TaskProfileForRecommendation = {
   optimizationGoal: OptimizationGoal;
 };
 
-export type ModelRecommendation = {
+export type RecommendationCandidate = {
   taskName: string;
   currentProvider: string;
   currentModel: string;
   recommendedProvider: string;
   recommendedModel: string;
-  recommendationType: "REDUCE_COST";
-  confidence: "LOW" | "MEDIUM" | "HIGH";
   estimatedSavingsUsd: number;
   estimatedSavingsPercent: number;
-  rationale: string[];
-  signals: {
-    traceCount: number;
-    currentAverageCostUsd: number;
-    currentAverageLatencyMs: number;
-    currentErrorRate: number;
-    averageSemanticSimilarity: number | null;
-    averageHallucinationRisk: number | null;
-    qualityThreshold: number;
-    riskLevel: TaskRiskLevel;
-    optimizationGoal: OptimizationGoal;
-  };
+  qualityThreshold: number;
+  riskLevel: TaskRiskLevel;
+  optimizationGoal: OptimizationGoal;
+  traceCount: number;
+  currentAverageCostUsd: number;
+  currentAverageLatencyMs: number;
+  currentErrorRate: number;
+  averageSemanticSimilarity: number | null;
+  averageHallucinationRisk: number | null;
 };
 
 const defaultTaskProfile = (taskName: string): TaskProfileForRecommendation => ({
@@ -67,17 +62,7 @@ function isTaskHealthy(point: TaskModelAnalyticsPoint, profile: TaskProfileForRe
   return true;
 }
 
-function recommendationConfidence(point: TaskModelAnalyticsPoint, profile: TaskProfileForRecommendation): ModelRecommendation["confidence"] {
-  if (point.traceCount >= 50 && profile.riskLevel === "LOW") {
-    return "HIGH";
-  }
-  if (point.traceCount >= 20 && profile.riskLevel !== "HIGH") {
-    return "MEDIUM";
-  }
-  return "LOW";
-}
-
-export function buildModelRecommendations(
+export function findRecommendationCandidates(
   analytics: TaskModelAnalyticsPoint[],
   catalog: ModelCatalogDto[],
   profiles: TaskProfileForRecommendation[] = []
@@ -85,7 +70,7 @@ export function buildModelRecommendations(
   const catalogByModel = new Map(catalog.map((entry) => [`${entry.provider}:${entry.model}`, entry]));
   const profilesByTask = new Map(profiles.map((profile) => [profile.taskName, profile]));
 
-  return analytics.flatMap((point): ModelRecommendation[] => {
+  return analytics.flatMap((point): RecommendationCandidate[] => {
     const currentModel = catalogByModel.get(`${point.provider}:${point.model}`);
     if (!currentModel) {
       return [];
@@ -120,26 +105,17 @@ export function buildModelRecommendations(
         currentModel: point.model,
         recommendedProvider: bestCandidate.candidate.provider,
         recommendedModel: bestCandidate.candidate.model,
-        recommendationType: "REDUCE_COST",
-        confidence: recommendationConfidence(point, profile),
         estimatedSavingsUsd: Number(estimatedSavingsUsd.toFixed(6)),
         estimatedSavingsPercent: Number((savingsPercent * 100).toFixed(1)),
-        rationale: [
-          `${bestCandidate.candidate.displayName} has a lower blended token price than ${currentModel.displayName}.`,
-          `The current task has enough healthy traces to test a cheaper same-provider model.`,
-          `Use this as an experiment candidate before switching production traffic.`
-        ],
-        signals: {
-          traceCount: point.traceCount,
-          currentAverageCostUsd: Number(point.averageCostUsd.toFixed(6)),
-          currentAverageLatencyMs: point.averageLatencyMs,
-          currentErrorRate: point.errorRate,
-          averageSemanticSimilarity: point.averageSemanticSimilarity,
-          averageHallucinationRisk: point.averageHallucinationRisk,
-          qualityThreshold: profile.qualityThreshold,
-          riskLevel: profile.riskLevel,
-          optimizationGoal: profile.optimizationGoal
-        }
+        qualityThreshold: profile.qualityThreshold,
+        riskLevel: profile.riskLevel,
+        optimizationGoal: profile.optimizationGoal,
+        traceCount: point.traceCount,
+        currentAverageCostUsd: Number(point.averageCostUsd.toFixed(6)),
+        currentAverageLatencyMs: point.averageLatencyMs,
+        currentErrorRate: point.errorRate,
+        averageSemanticSimilarity: point.averageSemanticSimilarity,
+        averageHallucinationRisk: point.averageHallucinationRisk
       }
     ];
   });

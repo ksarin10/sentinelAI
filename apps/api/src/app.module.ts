@@ -23,6 +23,7 @@ import { UsersModule } from "./users/users.module";
       })
     }),
     BullModule.registerQueue({ name: "evaluations" }),
+    BullModule.registerQueue({ name: "shadow-experiments" }),
     PrismaModule,
     UsersModule,
     AuthModule,

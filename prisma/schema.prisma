@@ -40,6 +40,13 @@ enum OptimizationGoal {
   MAXIMIZE_QUALITY
 }
 
+enum ShadowExperimentStatus {
+  QUEUED
+  RUNNING
+  PASSED
+  FAILED
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -59,9 +66,10 @@ model Project {
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   apiKeys      ApiKey[]
   traces       Trace[]
-  taskProfiles TaskProfile[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  taskProfiles      TaskProfile[]
+  shadowExperiments ShadowExperiment[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@unique([ownerId, slug])
   @@index([ownerId])
@@ -171,4 +179,46 @@ model EvaluationScore {
   createdAt    DateTime   @default(now())
 
   @@unique([evaluationId, metric])
+}
+
+model ShadowExperiment {
+  id                            String                 @id @default(cuid())
+  projectId                     String
+  project                       Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskName                      String
+  baselineProvider              String
+  baselineModel                 String
+  candidateProvider             String
+  candidateModel                String
+  status                        ShadowExperimentStatus @default(QUEUED)
+  sampleSize                    Int                    @default(10)
+  qualityThreshold              Float                  @default(0.8)
+  passedRuns                    Int                    @default(0)
+  failedRuns                    Int                    @default(0)
+  averageCandidateSemantic      Float?
+  averageCandidateHallucination Float?
+  estimatedSavingsPercent       Float?
+  reason                        String?
+  completedAt                   DateTime?
+  createdAt                     DateTime               @default(now())
+  updatedAt                     DateTime               @updatedAt
+  runs                          ShadowExperimentRun[]
+
+  @@unique([projectId, taskName, baselineProvider, baselineModel, candidateProvider, candidateModel])
+  @@index([projectId, status])
+}
+
+model ShadowExperimentRun {
+  id                 String           @id @default(cuid())
+  experimentId       String
+  experiment         ShadowExperiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  traceId            String
+  baselineResponse   String
+  candidateResponse  String
+  semanticScore      Float
+  hallucinationScore Float
+  passed             Boolean
+  createdAt          DateTime         @default(now())
+
+  @@index([experimentId])
 }

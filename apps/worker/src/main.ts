@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { Job, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { assertEvaluationJobData, EvaluationJobData } from "./evaluation-job";
+import { runShadowExperiment } from "./run-shadow-experiment";
 import { hallucinationRisk, semanticSimilarity } from "./scoring";
 
 const prisma = new PrismaClient();
@@ -37,13 +38,13 @@ async function runEvaluation(job: Job<EvaluationJobData>) {
   ]);
 }
 
-const worker = new Worker("evaluations", runEvaluation, { connection, concurrency: 5 });
+const evaluationWorker = new Worker("evaluations", runEvaluation, { connection, concurrency: 5 });
 
-worker.on("completed", (job) => {
+evaluationWorker.on("completed", (job) => {
   console.log(`Evaluation job ${job.id} completed`);
 });
 
-worker.on("failed", async (job, error) => {
+evaluationWorker.on("failed", async (job, error) => {
   console.error(`Evaluation job ${job?.id} failed`, error);
   if (job?.data?.evaluationId) {
     await prisma.evaluation.update({
@@ -53,8 +54,25 @@ worker.on("failed", async (job, error) => {
   }
 });
 
+const shadowWorker = new Worker(
+  "shadow-experiments",
+  async (job: Job<{ experimentId: string }>) => {
+    await runShadowExperiment(prisma, job.data.experimentId);
+  },
+  { connection, concurrency: 2 }
+);
+
+shadowWorker.on("completed", (job) => {
+  console.log(`Shadow experiment job ${job.id} completed`);
+});
+
+shadowWorker.on("failed", (job, error) => {
+  console.error(`Shadow experiment job ${job?.id} failed`, error);
+});
+
 process.on("SIGTERM", async () => {
-  await worker.close();
+  await evaluationWorker.close();
+  await shadowWorker.close();
   await prisma.$disconnect();
   await connection.quit();
 });
