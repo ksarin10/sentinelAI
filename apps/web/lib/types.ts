@@ -84,6 +84,29 @@ export type TraceRecord = {
   evaluations?: EvaluationRecord[];
 };
 
+export type RecommendationEmptyReason =
+  | "NO_TRACES"
+  | "INSUFFICIENT_TRACES"
+  | "TASK_UNHEALTHY"
+  | "NO_PROVIDER_KEYS"
+  | "NO_CHEAPER_CANDIDATE"
+  | "EXPERIMENTS_RUNNING"
+  | "EXPERIMENTS_FAILED"
+  | "AWAITING_VERIFICATION";
+
+export type RecommendationInsightsRecord = {
+  reason: RecommendationEmptyReason | null;
+  message: string;
+  pendingExperiments: number;
+  failedExperiments: number;
+  candidateCount: number;
+};
+
+export type RecommendationsResponse = {
+  recommendations: ModelRecommendationRecord[];
+  insights: RecommendationInsightsRecord;
+};
+
 export type ModelRecommendationRecord = {
   taskName: string;
   currentProvider: string;
@@ -158,5 +181,6 @@ export type DashboardData = {
   timeseries: AnalyticsPoint[];
   traces: TraceRecord[];
   recommendations: ModelRecommendationRecord[];
+  recommendationInsights: RecommendationInsightsRecord;
   modelMigrations: ModelMigrationRecord[];
 };

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+
+process.env.SHADOW_MIN_SAVINGS_USD = "0";
 import { TaskModelAnalyticsPoint } from "../src/analytics/task-model-analytics";
 import { ModelCatalogDto } from "../src/model-catalog/model-catalog.dto";
 import { findRecommendationCandidates } from "../src/recommendations/recommendation-candidates";

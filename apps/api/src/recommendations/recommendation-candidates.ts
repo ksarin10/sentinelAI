@@ -30,6 +30,19 @@ export type RecommendationCandidate = {
   averageHallucinationRisk: number | null;
 };
 
+export function minShadowSavingsUsd() {
+  const raw = process.env.SHADOW_MIN_SAVINGS_USD;
+  if (raw === undefined || raw === "") {
+    return 1;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : 1;
+}
+
+function passesMinSavings(candidate: RecommendationCandidate) {
+  return candidate.estimatedSavingsUsd >= minShadowSavingsUsd();
+}
+
 const defaultTaskProfile = (taskName: string): TaskProfileForRecommendation => ({
   taskName,
   riskLevel: "MEDIUM",
@@ -120,13 +133,17 @@ export function findRecommendationCandidates(
       return [];
     }
 
-    return [
-      {
-        ...selected,
-        qualityThreshold: profile.qualityThreshold,
-        riskLevel: profile.riskLevel,
-        optimizationGoal: profile.optimizationGoal
-      }
-    ];
+    const candidate: RecommendationCandidate = {
+      ...selected,
+      qualityThreshold: profile.qualityThreshold,
+      riskLevel: profile.riskLevel,
+      optimizationGoal: profile.optimizationGoal
+    };
+
+    if (!passesMinSavings(candidate)) {
+      return [];
+    }
+
+    return [candidate];
   });
 }

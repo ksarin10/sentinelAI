@@ -11,7 +11,13 @@ import { TraceTable } from "../../components/trace-table";
 import { Button } from "../../components/ui/button";
 import { apiRequest } from "../../lib/api";
 import { getSelectedProjectId, getToken, saveSelectedProjectId } from "../../lib/auth";
-import type { DashboardData, ModelMigrationRecord, ModelRecommendationRecord, ProjectRecord, TraceRecord } from "../../lib/types";
+import type {
+  DashboardData,
+  ModelMigrationRecord,
+  ProjectRecord,
+  RecommendationsResponse,
+  TraceRecord
+} from "../../lib/types";
 
 const emptySummary: AnalyticsSummary = {
   traceCount: 0,
@@ -49,14 +55,22 @@ export default function DashboardPage() {
       }
       setProjectId(activeProject.id);
       saveSelectedProjectId(activeProject.id);
-      const [summary, timeseries, traces, recommendations, modelMigrations] = await Promise.all([
+      const [summary, timeseries, traces, recommendationPayload, modelMigrations] = await Promise.all([
         apiRequest<AnalyticsSummary>(`/projects/${activeProject.id}/analytics/summary`, { token: authToken }),
         apiRequest<DashboardData["timeseries"]>(`/projects/${activeProject.id}/analytics/timeseries`, { token: authToken }),
         apiRequest<TraceRecord[]>(`/projects/${activeProject.id}/traces`, { token: authToken }),
-        apiRequest<ModelRecommendationRecord[]>(`/projects/${activeProject.id}/recommendations`, { token: authToken }),
+        apiRequest<RecommendationsResponse>(`/projects/${activeProject.id}/recommendations`, { token: authToken }),
         apiRequest<ModelMigrationRecord[]>(`/projects/${activeProject.id}/model-migrations`, { token: authToken })
       ]);
-      setData({ project: activeProject, summary, timeseries, traces, recommendations, modelMigrations });
+      setData({
+        project: activeProject,
+        summary,
+        timeseries,
+        traces,
+        recommendations: recommendationPayload.recommendations,
+        recommendationInsights: recommendationPayload.insights,
+        modelMigrations
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load dashboard");
     } finally {
@@ -182,7 +196,15 @@ export default function DashboardPage() {
                 </div>
               ))}
               {(data?.recommendations.length ?? 0) === 0 ? (
-                <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">No safe cost-saving recommendations yet. Send more healthy traces or seed more catalog models.</div>
+                <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  <p>{data?.recommendationInsights.message ?? "No verified recommendations yet."}</p>
+                  {(data?.recommendationInsights.pendingExperiments ?? 0) > 0 ? (
+                    <p className="mt-2 text-xs">
+                      {data.recommendationInsights.pendingExperiments} shadow verification
+                      {data.recommendationInsights.pendingExperiments === 1 ? "" : "s"} in progress.
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </div>

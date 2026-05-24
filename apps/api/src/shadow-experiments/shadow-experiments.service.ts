@@ -43,10 +43,25 @@ export class ShadowExperimentsService {
         }
       });
 
-      if (experiment.status === "QUEUED") {
-        await queueShadowExperiment(this.shadowQueue, experiment.id);
+      if (experiment.status !== "QUEUED") {
+        continue;
       }
+
+      await queueShadowExperiment(this.shadowQueue, experiment.id);
     }
+  }
+
+  async experimentCounts(projectId: string) {
+    const [pendingExperiments, failedExperiments] = await Promise.all([
+      this.prisma.shadowExperiment.count({
+        where: { projectId, status: { in: ["QUEUED", "RUNNING"] } }
+      }),
+      this.prisma.shadowExperiment.count({
+        where: { projectId, status: "FAILED" }
+      })
+    ]);
+
+    return { pendingExperiments, failedExperiments };
   }
 
   async listPassed(projectId: string): Promise<PassedShadowExperiment[]> {
