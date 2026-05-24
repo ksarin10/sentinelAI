@@ -29,21 +29,63 @@ This document defines **methodology, architecture, and phased implementation** f
 
 #### 1.1 Evaluation contract
 
-Each evaluation produces **normalized scores** in `[0, 1]` with provenance:
+Each evaluation produces **normalized scores** in `[0, 1]` (higher = better unless noted). Use **one judge call per trace** returning all enabled metrics in a single JSON object — do not run separate API calls per metric.
 
-| Metric | Meaning | Judge output |
-|--------|---------|----------------|
-| `semantic_similarity` | Response addresses the user/task intent | 0–1 + rationale |
-| `hallucination_risk` | Unsupported or contradictory claims vs prompt/context | 0–1 + rationale |
-| `task_success` (optional) | Task-specific rubric (support tone, policy adherence) | pass/fail or 0–1 |
+##### Metric tiers
 
-Store in `EvaluationScore`:
+**Tier A — gates (shadow + recommendations)**  
+Used for pass/fail and quality thresholds. Always on when judge is enabled.
+
+| Metric | Meaning | Notes |
+|--------|---------|--------|
+| `semantic_similarity` | Response addresses the user/task intent | Core |
+| `hallucination_risk` | Unsupported claims vs prompt/context (store inverted as `groundedness` if preferred) | Core; lower raw risk → higher quality |
+| `instruction_following` | Obeys explicit format, constraints, and “do not” rules in the prompt | Often stricter than semantic alone |
+
+**Tier B — style & UX (analytics + optional gates)**  
+Useful for support, sales, and customer-facing tasks. Enabled per rubric.
+
+| Metric | Meaning |
+|--------|---------|
+| `politeness` | Respectful, professional tone; no rudeness or dismissiveness |
+| `conciseness` | Answers without unnecessary padding; appropriate length for the ask |
+| `coherence` | Logical structure; no contradictions or non-sequiturs |
+| `tone_match` | Matches expected brand voice (formal support vs casual chatbot) |
+| `clarity` | Easy to understand; avoids jargon without explanation |
+
+**Tier C — safety & domain (task-specific)**  
+Enable for HIGH-risk or regulated tasks.
+
+| Metric | Meaning |
+|--------|---------|
+| `safety` | No harmful, abusive, or policy-violating content; appropriate refusals |
+| `factual_grounding` | Claims supported by provided `metadata.context` / RAG chunks only |
+| `task_success` | Holistic rubric score (policy QA, refund rules, etc.) |
+
+**Derived (computed, not judged)**  
+| Metric | Meaning |
+|--------|---------|
+| `latency_ms` | From trace (no LLM) |
+| `cost_usd` | From trace + catalog |
+
+##### Composite scores (optional)
+
+Roll up tiers for dashboards without extra LLM calls:
+
+- `quality_score` = weighted mean of Tier A (e.g. 0.4 semantic + 0.4 instruction_following + 0.2 × (1 − hallucination_risk))
+- `style_score` = mean of enabled Tier B metrics
+- `risk_score` = max(hallucination_risk, 1 − factual_grounding) when context is present
+
+Shadow experiments should gate on **Tier A only** by default; Tier B can be “must not regress” (candidate ≥ baseline − ε) for customer-facing tasks.
+
+Store each metric as its own `EvaluationScore` row (same `evaluationId`), shared provenance in `details`:
 
 ```json
 {
   "method": "llm_judge_v1",
   "model": "gpt-4.1-mini",
   "rubricVersion": "support.answer/v2",
+  "metricsReturned": ["semantic_similarity", "hallucination_risk", "politeness", "conciseness"],
   "rationale": "...",
   "promptHash": "..."
 }
@@ -73,7 +115,10 @@ Trace ingested → Evaluation QUEUED
 
 Example judge system prompt (sketch):
 
-> You are an evaluator. Score semantic_similarity and hallucination_risk from 0 to 1. Base hallucination only on the provided prompt and context, not world knowledge. Return JSON: `{ "semantic_similarity": number, "hallucination_risk": number, "rationale": string }`.
+> Score each metric from 0 to 1 (1 = best). For hallucination_risk, 1 = high risk. Use only the provided prompt, context, and response. Return JSON with all requested keys plus a short `rationale`:  
+> `{ "semantic_similarity", "hallucination_risk", "instruction_following", "politeness", "conciseness", "coherence", "rationale" }`.
+
+Rubrics declare which keys are required (e.g. codegen tasks may omit `politeness`; policy QA enables `factual_grounding`).
 
 #### 1.4 Cost & safety controls
 
@@ -173,6 +218,66 @@ CandidateReplayRouter
 - Max concurrent shadow jobs per project.
 - Max replays/day per project (config).
 - Skip api_replay for candidates with $/token above baseline unless `optimizationGoal` allows quality spend.
+- **Savings floor**: only run api_replay if estimated customer savings ≥ `SHADOW_MIN_SAVINGS_USD` (e.g. $5/month projected).
+- **Early stop**: after 5 failed runs in a row, abort experiment (don’t burn remaining K).
+- Store `estimatedReplayCostUsd` on `ShadowExperiment` for transparency in admin UI.
+
+#### 2.6 Shadow experiment economics (is this expensive?)
+
+**Short answer: no, not if you design it right.** You are **not** continuously calling every model in the catalog. Today’s behavior (and the planned design) is much narrower:
+
+| What actually runs | Frequency |
+|--------------------|-----------|
+| One experiment per unique `(task, baseline → candidate)` pair | Only when recommendations sync finds a new candidate |
+| At most **one** cheaper candidate per `(task, baseline model)` | Not a sweep across 39 catalog models |
+| Re-queue | Only while status is `QUEUED` — **not** on every dashboard refresh |
+| `production_proof` | **$0** inference — reuses traces already on the candidate model |
+| `simulate` (local dev) | **$0** — copies baseline response |
+
+**Per api_replay experiment (worst case today):**
+
+- Sample size **K = 10** baseline traces.
+- **10 candidate inference calls** (one model, one provider).
+- With LLM judge (planned): **+10 judge calls** (one batched JSON per trace, all metrics in one call).
+
+**Order-of-magnitude cost example** (support trace ~300 prompt + 150 completion tokens):
+
+| Step | Model | Approx cost |
+|------|--------|-------------|
+| Candidate replay × 10 | `gpt-4.1-mini` | ~$0.004 total |
+| Judge × 10 (all metrics in one call) | `gpt-4.1-mini` | ~$0.006 total |
+| **One experiment** | | **~$0.01** |
+
+**Project-level example:** 5 tasks each on an expensive baseline → 5 experiments queued once → **~$0.05** total replay+judge, not hundreds of dollars.
+
+**When cost *can* creep up (avoid these):**
+
+- Re-running experiments on every API poll without TTL/dedup.
+- Sweeping **all** catalog models instead of the single best cheaper candidate.
+- Cross-provider replay for every trace at high volume without `production_proof` first.
+- Using a large judge model (e.g. Opus) on every trace in **both** ingest eval and shadow.
+- High K (e.g. 50) or no early-stop on failing candidates.
+
+**Cost formula (planning):**
+
+```
+shadow_cost ≈ experiments × K × (candidate_inference_cost + judge_cost)
+
+experiments ≤ active_tasks_with_expensive_baselines × 1   # one candidate each
+```
+
+**Recommended defaults for prod:**
+
+| Knob | Default | Purpose |
+|------|---------|---------|
+| `K` | 10 | Statistical stability vs cost |
+| `SHADOW_MAX_EXPERIMENTS_PER_DAY_PER_PROJECT` | 20 | Hard cap |
+| `SHADOW_MIN_SAVINGS_USD` | 5 | Skip micro-savings |
+| Judge on ingest | sample 10–20% of traces + all HIGH-risk tasks | Control standing eval cost |
+| Judge model | `gpt-4.1-mini` or `claude-haiku-4.5` | Cheap, sufficient for rubric scoring |
+
+**Standing eval cost (separate from shadow):**  
+Every ingested trace × judge is the main recurring LLM bill. Shadow is a **one-time verification tax** per (task, baseline, candidate) tuple. Budget ingest judging first; shadow second.
 
 ### Implementation phases
 
@@ -421,6 +526,8 @@ S1–S3 (replay modes)┘
 2. **Cross-provider recommendations** — allow in v1 or same-provider only?
 3. **Store customer provider keys** per project vs platform keys only for shadow replay.
 4. **Auto-create task profiles** on first trace — on or off by default?
+5. **Tier B metrics in shadow gates** — regression-only (don’t hurt politeness) vs ignore for pass/fail?
+6. **Ingest judge sampling rate** — 100% vs sampled by task risk (recommended: 100% HIGH, 20% MEDIUM, 10% LOW).
 
 ---
 
