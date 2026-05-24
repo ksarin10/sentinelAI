@@ -8,6 +8,7 @@ import { IngestModule } from "./ingest/ingest.module";
 import { ModelCatalogModule } from "./model-catalog/model-catalog.module";
 import { ModelMigrationsModule } from "./model-migrations/model-migrations.module";
 import { PrismaModule } from "./prisma/prisma.module";
+import { ProviderCredentialsModule } from "./provider-credentials/provider-credentials.module";
 import { ProjectsModule } from "./projects/projects.module";
 import { RecommendationsModule } from "./recommendations/recommendations.module";
 import { TracesModule } from "./traces/traces.module";
@@ -28,6 +29,7 @@ import { UsersModule } from "./users/users.module";
     UsersModule,
     AuthModule,
     ProjectsModule,
+    ProviderCredentialsModule,
     TracesModule,
     IngestModule,
     EvaluationsModule,

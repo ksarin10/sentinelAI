@@ -4,6 +4,7 @@ import { ModelCatalogService } from "../model-catalog/model-catalog.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { findRecommendationCandidates } from "./recommendation-candidates";
 import { buildVerifiedRecommendations } from "../shadow-experiments/shadow-experiment-engine";
+import { ProviderCredentialsService } from "../provider-credentials/provider-credentials.service";
 import { ShadowExperimentsService } from "../shadow-experiments/shadow-experiments.service";
 
 @Injectable()
@@ -12,6 +13,7 @@ export class RecommendationsService {
     private readonly analytics: AnalyticsService,
     private readonly modelCatalog: ModelCatalogService,
     private readonly prisma: PrismaService,
+    private readonly providerCredentials: ProviderCredentialsService,
     private readonly shadowExperiments: ShadowExperimentsService
   ) {}
 
@@ -30,7 +32,8 @@ export class RecommendationsService {
       })
     ]);
 
-    const candidates = findRecommendationCandidates(taskModels, catalog, profiles);
+    const configuredProviders = await this.providerCredentials.configuredProviders(projectId);
+    const candidates = findRecommendationCandidates(taskModels, catalog, profiles, configuredProviders);
     await this.shadowExperiments.syncCandidates(projectId, candidates);
     const passedExperiments = await this.shadowExperiments.listPassed(projectId);
 

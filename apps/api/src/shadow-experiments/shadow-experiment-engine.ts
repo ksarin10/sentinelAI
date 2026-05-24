@@ -99,6 +99,9 @@ export function buildVerifiedRecommendations(
         estimatedSavingsPercent: savingsPercent,
         rationale: [
           `${recommendedModel.displayName} was verified against recent ${candidate.taskName} traffic in the background.`,
+          candidate.recommendationScope === "CROSS_PROVIDER"
+            ? `Cross-provider switch (${candidate.recommendedProvider}) cleared shadow checks using your connected provider key.`
+            : `Same-provider downgrade cleared shadow checks on sampled calls.`,
           `Shadow checks passed on ${passed.passedRuns} sampled calls while staying above your quality threshold.`,
           `Estimated savings remain about ${savingsPercent}% versus ${currentModel.displayName}.`
         ],

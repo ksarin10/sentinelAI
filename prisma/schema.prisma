@@ -72,13 +72,28 @@ model Project {
   owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   apiKeys      ApiKey[]
   traces       Trace[]
-  taskProfiles      TaskProfile[]
-  shadowExperiments ShadowExperiment[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  taskProfiles         TaskProfile[]
+  shadowExperiments    ShadowExperiment[]
+  providerCredentials  ProjectProviderCredential[]
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
 
   @@unique([ownerId, slug])
   @@index([ownerId])
+}
+
+model ProjectProviderCredential {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider        String
+  apiKeyCiphertext String
+  keyHint         String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, provider])
+  @@index([projectId])
 }
 
 model ModelCatalog {

@@ -1,4 +1,5 @@
-import { ModelLifecycleStatus, OptimizationGoal, TaskRiskLevel } from "@prisma/client";
+import { OptimizationGoal, TaskRiskLevel } from "@prisma/client";
+import { selectRecommendationCandidate } from "@sentinelai/shared";
 import { TaskModelAnalyticsPoint } from "../analytics/task-model-analytics";
 import { ModelCatalogDto } from "../model-catalog/model-catalog.dto";
 
@@ -15,6 +16,7 @@ export type RecommendationCandidate = {
   currentModel: string;
   recommendedProvider: string;
   recommendedModel: string;
+  recommendationScope: "SAME_PROVIDER" | "CROSS_PROVIDER";
   estimatedSavingsUsd: number;
   estimatedSavingsPercent: number;
   qualityThreshold: number;
@@ -34,10 +36,6 @@ const defaultTaskProfile = (taskName: string): TaskProfileForRecommendation => (
   qualityThreshold: 0.8,
   optimizationGoal: "BALANCED"
 });
-
-function blendedTokenPrice(model: Pick<ModelCatalogDto, "inputTokenPricePer1M" | "outputTokenPricePer1M">) {
-  return (model.inputTokenPricePer1M + model.outputTokenPricePer1M) / 2;
-}
 
 function maxHallucinationRisk(riskLevel: TaskRiskLevel) {
   if (riskLevel === "HIGH") {
@@ -65,8 +63,19 @@ function isTaskHealthy(point: TaskModelAnalyticsPoint, profile: TaskProfileForRe
 export function findRecommendationCandidates(
   analytics: TaskModelAnalyticsPoint[],
   catalog: ModelCatalogDto[],
-  profiles: TaskProfileForRecommendation[] = []
+  profiles: TaskProfileForRecommendation[] = [],
+  configuredProviders: Set<string> = new Set()
 ) {
+  const catalogForSelection = catalog.map((entry) => ({
+    provider: entry.provider,
+    model: entry.model,
+    status: entry.status,
+    capabilities: entry.capabilities,
+    inputTokenPricePer1M: entry.inputTokenPricePer1M,
+    outputTokenPricePer1M: entry.outputTokenPricePer1M,
+    contextWindow: entry.contextWindow
+  }));
+
   const catalogByModel = new Map(catalog.map((entry) => [`${entry.provider}:${entry.model}`, entry]));
   const profilesByTask = new Map(profiles.map((profile) => [profile.taskName, profile]));
 
@@ -81,41 +90,42 @@ export function findRecommendationCandidates(
       return [];
     }
 
-    const currentPrice = blendedTokenPrice(currentModel);
-    const cheaperCandidates = catalog
-      .filter((candidate) => candidate.provider === point.provider)
-      .filter((candidate) => candidate.model !== point.model)
-      .filter((candidate) => candidate.status === ("ACTIVE" satisfies ModelLifecycleStatus))
-      .map((candidate) => ({ candidate, price: blendedTokenPrice(candidate) }))
-      .filter(({ price }) => price > 0 && price < currentPrice)
-      .sort((a, b) => a.price - b.price);
+    const selected = selectRecommendationCandidate(
+      {
+        taskName: point.taskName,
+        provider: point.provider,
+        model: point.model,
+        traceCount: point.traceCount,
+        totalCostUsd: point.totalCostUsd,
+        averageCostUsd: point.averageCostUsd,
+        averageLatencyMs: point.averageLatencyMs,
+        errorRate: point.errorRate,
+        averageSemanticSimilarity: point.averageSemanticSimilarity,
+        averageHallucinationRisk: point.averageHallucinationRisk
+      },
+      {
+        provider: currentModel.provider,
+        model: currentModel.model,
+        status: currentModel.status,
+        capabilities: currentModel.capabilities,
+        inputTokenPricePer1M: currentModel.inputTokenPricePer1M,
+        outputTokenPricePer1M: currentModel.outputTokenPricePer1M,
+        contextWindow: currentModel.contextWindow
+      },
+      catalogForSelection,
+      { configuredProviders }
+    );
 
-    const bestCandidate = cheaperCandidates[0];
-    if (!bestCandidate) {
+    if (!selected) {
       return [];
     }
 
-    const savingsPercent = 1 - bestCandidate.price / currentPrice;
-    const estimatedSavingsUsd = point.totalCostUsd * savingsPercent;
-
     return [
       {
-        taskName: point.taskName,
-        currentProvider: point.provider,
-        currentModel: point.model,
-        recommendedProvider: bestCandidate.candidate.provider,
-        recommendedModel: bestCandidate.candidate.model,
-        estimatedSavingsUsd: Number(estimatedSavingsUsd.toFixed(6)),
-        estimatedSavingsPercent: Number((savingsPercent * 100).toFixed(1)),
+        ...selected,
         qualityThreshold: profile.qualityThreshold,
         riskLevel: profile.riskLevel,
-        optimizationGoal: profile.optimizationGoal,
-        traceCount: point.traceCount,
-        currentAverageCostUsd: Number(point.averageCostUsd.toFixed(6)),
-        currentAverageLatencyMs: point.averageLatencyMs,
-        currentErrorRate: point.errorRate,
-        averageSemanticSimilarity: point.averageSemanticSimilarity,
-        averageHallucinationRisk: point.averageHallucinationRisk
+        optimizationGoal: profile.optimizationGoal
       }
     ];
   });

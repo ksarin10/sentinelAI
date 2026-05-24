@@ -1,5 +1,6 @@
 import { PrismaClient, ShadowExperiment } from "@prisma/client";
 import { evaluateShadowExperimentCompletion, evaluateShadowRun } from "./shadow-experiment-eval";
+import { resolveProviderApiKey } from "./resolve-provider-api-key";
 import { replayCandidatePrompt } from "./shadow-replay";
 import { hallucinationRisk, semanticSimilarity } from "./scoring";
 
@@ -106,6 +107,19 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
     return;
   }
 
+  const candidateApiKey = await resolveProviderApiKey(prisma, experiment.projectId, experiment.candidateProvider);
+  if (!candidateApiKey) {
+    await prisma.shadowExperiment.update({
+      where: { id: experiment.id },
+      data: {
+        status: "FAILED",
+        reason: `No API key configured for ${experiment.candidateProvider}. Add a provider key under Project settings to run cross-provider shadow replay.`,
+        completedAt: new Date()
+      }
+    });
+    return;
+  }
+
   let passedRuns = 0;
   let failedRuns = 0;
   const semanticTotals: number[] = [];
@@ -113,7 +127,13 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
 
   for (const trace of traces) {
     const baselineResponse = trace.response ?? "";
-    const candidateResponse = await replayCandidatePrompt(trace.prompt, experiment.candidateProvider, experiment.candidateModel, baselineResponse);
+    const candidateResponse = await replayCandidatePrompt(
+      trace.prompt,
+      experiment.candidateProvider,
+      experiment.candidateModel,
+      baselineResponse,
+      candidateApiKey
+    );
 
     if (!candidateResponse) {
       failedRuns += 1;

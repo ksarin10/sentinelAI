@@ -9,7 +9,7 @@ import { Card } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { apiRequest } from "../../lib/api";
 import { getSelectedProjectId, getToken, saveSelectedProjectId } from "../../lib/auth";
-import type { ApiKeyRecord, ProjectRecord } from "../../lib/types";
+import type { ApiKeyRecord, ProjectRecord, ProviderCredentialRecord } from "../../lib/types";
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -22,6 +22,9 @@ export default function ProjectsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [keyName, setKeyName] = useState("Server ingestion key");
+  const [providerCredentials, setProviderCredentials] = useState<ProviderCredentialRecord[]>([]);
+  const [providerName, setProviderName] = useState("openai");
+  const [providerApiKey, setProviderApiKey] = useState("");
   const [newSecret, setNewSecret] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -32,6 +35,13 @@ export default function ProjectsPage() {
   const [token, setToken] = useState<string | null>(null);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
+
+  async function loadProviderCredentials(projectId: string, authToken: string) {
+    const data = await apiRequest<ProviderCredentialRecord[]>(`/projects/${projectId}/provider-credentials`, {
+      token: authToken
+    });
+    setProviderCredentials(data);
+  }
 
   async function loadProjects(authToken: string | null = token) {
     if (!authToken) {
@@ -49,6 +59,9 @@ export default function ProjectsPage() {
       setSelectedProjectId(nextProjectId);
       if (nextProjectId) {
         saveSelectedProjectId(nextProjectId);
+        await loadProviderCredentials(nextProjectId, authToken);
+      } else {
+        setProviderCredentials([]);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load projects");
@@ -86,6 +99,27 @@ export default function ProjectsPage() {
       setDescription("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create project");
+    }
+  }
+
+  async function saveProviderCredential(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !selectedProject) {
+      return;
+    }
+    setError("");
+    setNotice("");
+    try {
+      await apiRequest<ProviderCredentialRecord>(`/projects/${selectedProject.id}/provider-credentials`, {
+        token,
+        method: "POST",
+        body: { provider: providerName, apiKey: providerApiKey }
+      });
+      setProviderApiKey("");
+      await loadProviderCredentials(selectedProject.id, token);
+      setNotice(`Saved ${providerName} provider key for shadow replay and cross-provider recommendations.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save provider key");
     }
   }
 
@@ -199,6 +233,9 @@ export default function ProjectsPage() {
                 onClick={() => {
                   setSelectedProjectId(project.id);
                   saveSelectedProjectId(project.id);
+                  if (token) {
+                    void loadProviderCredentials(project.id, token);
+                  }
                 }}
                 className={`block w-full border-t border-border px-4 py-3 text-left text-sm ${project.id === selectedProject?.id ? "bg-muted" : "bg-white hover:bg-muted"}`}
               >
@@ -221,6 +258,48 @@ export default function ProjectsPage() {
                   <Input value={keyName} onChange={(event) => setKeyName(event.target.value)} placeholder="Server ingestion key" required />
                   <Button>Create key</Button>
                 </form>
+                <div className="mt-6 rounded-md border border-border bg-muted/30 p-4">
+                  <h3 className="text-sm font-semibold">LLM provider keys (for recommendations)</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Cross-provider suggestions and shadow replay use keys you store here. Same-provider downgrades need the baseline provider; add other providers to unlock cheaper models elsewhere.
+                  </p>
+                  <form className="mt-3 grid gap-3 md:grid-cols-[140px_1fr_auto]" onSubmit={saveProviderCredential}>
+                    <select
+                      className="rounded-md border border-border bg-white px-3 py-2 text-sm"
+                      value={providerName}
+                      onChange={(event) => setProviderName(event.target.value)}
+                    >
+                      <option value="openai">openai</option>
+                      <option value="anthropic">anthropic</option>
+                      <option value="google">google</option>
+                      <option value="groq">groq</option>
+                      <option value="mistral">mistral</option>
+                      <option value="cohere">cohere</option>
+                    </select>
+                    <Input
+                      value={providerApiKey}
+                      onChange={(event) => setProviderApiKey(event.target.value)}
+                      type="password"
+                      placeholder="sk-..."
+                      required
+                      minLength={8}
+                    />
+                    <Button type="submit" disabled={!providerApiKey}>
+                      Save key
+                    </Button>
+                  </form>
+                  <div className="mt-3 space-y-2">
+                    {providerCredentials.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No provider keys saved yet.</div>
+                    ) : null}
+                    {providerCredentials.map((credential) => (
+                      <div key={credential.provider} className="flex items-center justify-between rounded-md border border-border bg-white px-3 py-2 text-sm">
+                        <span className="font-medium">{credential.provider}</span>
+                        <span className="text-muted-foreground">{credential.keyHint}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <div className="mt-4 space-y-3">
                   <div className="rounded-md border border-border bg-muted p-4">
                     <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">

@@ -8,6 +8,6 @@ import { ProjectsService } from "./projects.service";
   imports: [BullModule.registerQueue({ name: "evaluations" })],
   controllers: [ProjectsController],
   providers: [ProjectsService, ProjectsRepository],
-  exports: [ProjectsService]
+  exports: [ProjectsService, ProjectsRepository]
 })
 export class ProjectsModule {}

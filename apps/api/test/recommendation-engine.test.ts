@@ -53,14 +53,19 @@ const healthyTask: TaskModelAnalyticsPoint = {
   averageHallucinationRisk: 0.08
 };
 
-const candidates = findRecommendationCandidates([healthyTask], catalog, [
-  {
-    taskName: "support.answer",
-    riskLevel: "MEDIUM",
-    qualityThreshold: 0.8,
-    optimizationGoal: "REDUCE_COST"
-  }
-]);
+const candidates = findRecommendationCandidates(
+  [healthyTask],
+  catalog,
+  [
+    {
+      taskName: "support.answer",
+      riskLevel: "MEDIUM",
+      qualityThreshold: 0.8,
+      optimizationGoal: "REDUCE_COST"
+    }
+  ],
+  new Set(["openai"])
+);
 
 assert.equal(candidates.length, 1);
 assert.equal(candidates[0].recommendedModel, "gpt-4.1-mini");
@@ -95,7 +100,8 @@ assert.match(verifiedAfterExperiment[0].rationale[0], /verified against recent s
 const weakQualityCandidates = findRecommendationCandidates(
   [{ ...healthyTask, averageSemanticSimilarity: 0.6 }],
   catalog,
-  [{ taskName: "support.answer", riskLevel: "MEDIUM", qualityThreshold: 0.8, optimizationGoal: "REDUCE_COST" }]
+  [{ taskName: "support.answer", riskLevel: "MEDIUM", qualityThreshold: 0.8, optimizationGoal: "REDUCE_COST" }],
+  new Set(["openai"])
 );
 
 assert.equal(weakQualityCandidates.length, 0);

@@ -523,11 +523,18 @@ S1–S3 (replay modes)┘
 ## Open decisions (need your input later)
 
 1. **Default judge model** — `gpt-4.1-mini` vs `claude-haiku-4.5` for cost/quality tradeoff.
-2. **Cross-provider recommendations** — allow in v1 or same-provider only?
-3. **Store customer provider keys** per project vs platform keys only for shadow replay.
+2. ~~**Cross-provider recommendations**~~ — **Decided: policy C + B** (see below).
+3. ~~**Store customer provider keys**~~ — **Decided: per-project encrypted credentials** (`ProjectProviderCredential`).
 4. **Auto-create task profiles** on first trace — on or off by default?
 5. **Tier B metrics in shadow gates** — regression-only (don’t hurt politeness) vs ignore for pass/fail?
 6. **Ingest judge sampling rate** — 100% vs sampled by task risk (recommended: 100% HIGH, 20% MEDIUM, 10% LOW).
+
+### Decided: cross-provider policy **C + B**
+
+- **C (credential gate):** A candidate provider is eligible only if the project has saved an API key for that provider. Shadow `api_replay` uses that key; no platform-funded replay in production.
+- **B (ranking):** Prefer the best **same-provider** downgrade first. Surface **cross-provider** only if savings beat the same-provider option by **≥20%** (`crossProviderSavingsMultiplier = 1.2`).
+- **Dev fallback:** Non-production workers may fall back to env keys (`OPENAI_API_KEY`, etc.) when no project key exists.
+- **UI:** Projects → “LLM provider keys” form; API `POST /projects/:id/provider-credentials`.
 
 ---
 

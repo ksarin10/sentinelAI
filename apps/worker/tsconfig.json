@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "paths": {
+      "@sentinelai/shared": ["../../packages/shared/dist"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

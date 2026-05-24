@@ -8,6 +8,13 @@ export type AuthResponse = {
   };
 };
 
+export type ProviderCredentialRecord = {
+  provider: string;
+  keyHint: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ApiKeyRecord = {
   id: string;
   name: string;
