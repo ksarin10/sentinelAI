@@ -17,6 +17,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "model-catalog:seed": "tsx prisma/seed-model-catalog.ts",
+    "model-catalog:sync": "tsx prisma/seed-model-catalog.ts",
     "demo:seed": "tsx prisma/seed-optimization-demo.ts",
     "example:chatbot": "tsx examples/chatbot/support-bot.ts",
     "format": "prettier --write ."

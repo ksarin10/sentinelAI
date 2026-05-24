@@ -1,67 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
-
-/** Keep in sync with packages/shared/src/model-catalog.ts for local demo seeding. */
-const demoModelCatalog = [
-  {
-    provider: "openai",
-    model: "gpt-4.1",
-    displayName: "GPT-4.1",
-    status: "ACTIVE" as const,
-    inputTokenPricePer1M: 2,
-    outputTokenPricePer1M: 8,
-    contextWindow: 1047576,
-    capabilities: ["text", "vision", "tools", "json", "reasoning"],
-    catalogUpdatedAt: "2026-05-23"
-  },
-  {
-    provider: "openai",
-    model: "gpt-4.1-mini",
-    displayName: "GPT-4.1 mini",
-    status: "ACTIVE" as const,
-    inputTokenPricePer1M: 0.4,
-    outputTokenPricePer1M: 1.6,
-    contextWindow: 1047576,
-    capabilities: ["text", "vision", "tools", "json"],
-    catalogUpdatedAt: "2026-05-23"
-  },
-  {
-    provider: "openai",
-    model: "gpt-4.1-nano",
-    displayName: "GPT-4.1 nano",
-    status: "ACTIVE" as const,
-    inputTokenPricePer1M: 0.1,
-    outputTokenPricePer1M: 0.4,
-    contextWindow: 1047576,
-    capabilities: ["text", "json"],
-    catalogUpdatedAt: "2026-05-23"
-  },
-  {
-    provider: "anthropic",
-    model: "claude-sonnet-4.5",
-    displayName: "Claude Sonnet 4.5",
-    status: "RETIRING" as const,
-    replacementProvider: "anthropic",
-    replacementModel: "claude-sonnet-4.6",
-    retirementDate: "2026-09-01",
-    inputTokenPricePer1M: 3,
-    outputTokenPricePer1M: 15,
-    contextWindow: 200000,
-    capabilities: ["text", "vision", "tools", "json", "reasoning"],
-    notes: "Placeholder lifecycle entry for migration workflow demos.",
-    catalogUpdatedAt: "2026-05-23"
-  },
-  {
-    provider: "anthropic",
-    model: "claude-sonnet-4.6",
-    displayName: "Claude Sonnet 4.6",
-    status: "ACTIVE" as const,
-    inputTokenPricePer1M: 3,
-    outputTokenPricePer1M: 15,
-    contextWindow: 200000,
-    capabilities: ["text", "vision", "tools", "json", "reasoning"],
-    catalogUpdatedAt: "2026-05-23"
-  }
-];
+import { syncModelCatalog } from "../model-catalog/sync-model-catalog";
 
 type MockTraceSpec = {
   name: string;
@@ -78,42 +16,6 @@ type MockTraceSpec = {
   semanticScore: number;
   hallucinationScore: number;
 };
-
-async function seedModelCatalog(prisma: PrismaClient) {
-  for (const entry of demoModelCatalog) {
-    await prisma.modelCatalog.upsert({
-      where: { provider_model: { provider: entry.provider, model: entry.model } },
-      update: {
-        displayName: entry.displayName,
-        status: entry.status,
-        replacementProvider: entry.replacementProvider,
-        replacementModel: entry.replacementModel,
-        retirementDate: entry.retirementDate ? new Date(entry.retirementDate) : null,
-        inputTokenPricePer1M: entry.inputTokenPricePer1M,
-        outputTokenPricePer1M: entry.outputTokenPricePer1M,
-        contextWindow: entry.contextWindow,
-        capabilities: entry.capabilities,
-        notes: entry.notes,
-        catalogUpdatedAt: new Date(entry.catalogUpdatedAt)
-      },
-      create: {
-        provider: entry.provider,
-        model: entry.model,
-        displayName: entry.displayName,
-        status: entry.status,
-        replacementProvider: entry.replacementProvider,
-        replacementModel: entry.replacementModel,
-        retirementDate: entry.retirementDate ? new Date(entry.retirementDate) : null,
-        inputTokenPricePer1M: entry.inputTokenPricePer1M,
-        outputTokenPricePer1M: entry.outputTokenPricePer1M,
-        contextWindow: entry.contextWindow,
-        capabilities: entry.capabilities,
-        notes: entry.notes,
-        catalogUpdatedAt: new Date(entry.catalogUpdatedAt)
-      }
-    });
-  }
-}
 
 async function createMockTrace(prisma: PrismaClient, projectId: string, spec: MockTraceSpec) {
   const totalTokens = spec.promptTokens + spec.completionTokens;
@@ -175,7 +77,7 @@ function daysAgo(days: number) {
 }
 
 export async function seedOptimizationDemo(prisma: PrismaClient, projectId: string) {
-  await seedModelCatalog(prisma);
+  const catalogResult = await syncModelCatalog(prisma);
 
   await prisma.taskProfile.upsert({
     where: { projectId_taskName: { projectId, taskName: "support.answer" } },
@@ -233,7 +135,7 @@ export async function seedOptimizationDemo(prisma: PrismaClient, projectId: stri
   }
 
   return {
-    catalogEntries: demoModelCatalog.length,
+    catalogEntries: catalogResult.synced,
     tracesCreated: expensiveSupportTraces.length + retiringModelTraces.length,
     recommendationPreview: {
       taskName: "support.answer",

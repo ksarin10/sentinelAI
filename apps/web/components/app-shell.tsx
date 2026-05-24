@@ -1,9 +1,11 @@
-import { Activity, BarChart3, KeyRound, RadioTower, ShieldCheck } from "lucide-react";
+import { Activity, BarChart3, BookOpen, KeyRound, RadioTower, ShieldCheck } from "lucide-react";
 import Link from "next/link";
+import { modelCatalogUiEnabled } from "../lib/features";
 
 const nav = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  { href: "/projects", label: "Projects", icon: KeyRound }
+  { href: "/projects", label: "Projects", icon: KeyRound },
+  ...(modelCatalogUiEnabled ? [{ href: "/catalog", label: "Model catalog", icon: BookOpen }] : [])
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

@@ -20,6 +20,12 @@ enum EvaluationStatus {
   FAILED
 }
 
+enum ModelCatalogSource {
+  MANUAL
+  PROVIDER_DOCS
+  PROVIDER_API
+}
+
 enum ModelLifecycleStatus {
   ACTIVE
   RETIRING
@@ -89,6 +95,10 @@ model ModelCatalog {
   contextWindow         Int?
   capabilities          String[]
   notes                 String?
+  source                ModelCatalogSource   @default(MANUAL)
+  sourceUrl             String?
+  confidence            Float                @default(0.9)
+  lastCheckedAt         DateTime             @default(now())
   catalogUpdatedAt      DateTime             @default(now())
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt

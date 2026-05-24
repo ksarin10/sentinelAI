@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { ModelCatalog, Prisma } from "@prisma/client";
+import { ModelCatalog, ModelCatalogSource, Prisma } from "@prisma/client";
 import { toModelCatalogDto } from "../src/model-catalog/model-catalog.dto";
 
 const entry: ModelCatalog = {
@@ -16,9 +16,13 @@ const entry: ModelCatalog = {
   contextWindow: 1047576,
   capabilities: ["text", "json"],
   notes: null,
-  catalogUpdatedAt: new Date("2026-05-23T00:00:00.000Z"),
-  createdAt: new Date("2026-05-23T00:00:00.000Z"),
-  updatedAt: new Date("2026-05-23T00:00:00.000Z")
+  source: ModelCatalogSource.PROVIDER_DOCS,
+  sourceUrl: "https://openai.com/api/pricing",
+  confidence: 0.92,
+  lastCheckedAt: new Date("2026-05-24T00:00:00.000Z"),
+  catalogUpdatedAt: new Date("2026-05-24T00:00:00.000Z"),
+  createdAt: new Date("2026-05-24T00:00:00.000Z"),
+  updatedAt: new Date("2026-05-24T00:00:00.000Z")
 };
 
 assert.deepEqual(toModelCatalogDto(entry), {
@@ -35,5 +39,9 @@ assert.deepEqual(toModelCatalogDto(entry), {
   contextWindow: 1047576,
   capabilities: ["text", "json"],
   notes: null,
-  catalogUpdatedAt: "2026-05-23T00:00:00.000Z"
+  source: "PROVIDER_DOCS",
+  sourceUrl: "https://openai.com/api/pricing",
+  confidence: 0.92,
+  lastCheckedAt: "2026-05-24T00:00:00.000Z",
+  catalogUpdatedAt: "2026-05-24T00:00:00.000Z"
 });

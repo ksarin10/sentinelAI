@@ -95,4 +95,5 @@ export type EvaluationScoreDto = {
 };
 
 export * from "./model-catalog";
+export * from "./catalog";
 export * from "./shadow-experiment";

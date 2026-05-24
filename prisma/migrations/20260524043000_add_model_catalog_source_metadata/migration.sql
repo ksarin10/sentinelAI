@@ -1,0 +1,8 @@
+-- CreateEnum
+CREATE TYPE "ModelCatalogSource" AS ENUM ('MANUAL', 'PROVIDER_DOCS', 'PROVIDER_API');
+
+-- AlterTable
+ALTER TABLE "ModelCatalog" ADD COLUMN     "source" "ModelCatalogSource" NOT NULL DEFAULT 'MANUAL',
+ADD COLUMN     "sourceUrl" TEXT,
+ADD COLUMN     "confidence" DOUBLE PRECISION NOT NULL DEFAULT 0.9,
+ADD COLUMN     "lastCheckedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

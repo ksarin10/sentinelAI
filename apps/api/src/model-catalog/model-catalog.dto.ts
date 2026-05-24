@@ -14,6 +14,10 @@ export type ModelCatalogDto = {
   contextWindow: number | null;
   capabilities: string[];
   notes: string | null;
+  source: string;
+  sourceUrl: string | null;
+  confidence: number;
+  lastCheckedAt: string;
   catalogUpdatedAt: string;
 };
 
@@ -32,6 +36,10 @@ export function toModelCatalogDto(entry: ModelCatalog): ModelCatalogDto {
     contextWindow: entry.contextWindow,
     capabilities: entry.capabilities,
     notes: entry.notes,
+    source: entry.source,
+    sourceUrl: entry.sourceUrl,
+    confidence: entry.confidence,
+    lastCheckedAt: entry.lastCheckedAt.toISOString(),
     catalogUpdatedAt: entry.catalogUpdatedAt.toISOString()
   };
 }

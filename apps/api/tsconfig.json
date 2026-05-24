@@ -4,7 +4,10 @@
     "outDir": "dist",
     "rootDir": "src",
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "paths": {
+      "@sentinelai/shared": ["../../packages/shared/dist"]
+    }
   },
   "include": ["src/**/*.ts"]
 }

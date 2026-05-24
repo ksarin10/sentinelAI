@@ -89,6 +89,27 @@ export type ModelRecommendationRecord = {
   };
 };
 
+export type ModelCatalogRecord = {
+  id: string;
+  provider: string;
+  model: string;
+  displayName: string;
+  status: string;
+  replacementProvider: string | null;
+  replacementModel: string | null;
+  retirementDate: string | null;
+  inputTokenPricePer1M: number;
+  outputTokenPricePer1M: number;
+  contextWindow: number | null;
+  capabilities: string[];
+  notes: string | null;
+  source: string;
+  sourceUrl: string | null;
+  confidence: number;
+  lastCheckedAt: string;
+  catalogUpdatedAt: string;
+};
+
 export type ModelMigrationRecord = {
   provider: string;
   model: string;

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { ModelLifecycleStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { toModelCatalogDto } from "./model-catalog.dto";
+import { syncModelCatalog } from "./sync-model-catalog";
 
 export type ModelCatalogFilters = {
   provider?: string;
@@ -26,5 +27,9 @@ export class ModelCatalogService {
     });
 
     return entries.map(toModelCatalogDto);
+  }
+
+  syncFromCuratedCatalog() {
+    return syncModelCatalog(this.prisma);
   }
 }
