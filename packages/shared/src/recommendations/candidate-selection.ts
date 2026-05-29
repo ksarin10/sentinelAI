@@ -56,6 +56,13 @@ function blendedTokenPrice(model: Pick<CatalogModelForRecommendation, "inputToke
   return (model.inputTokenPricePer1M + model.outputTokenPricePer1M) / 2;
 }
 
+function isChatCompletionModel(candidate: CatalogModelForRecommendation) {
+  if (candidate.outputTokenPricePer1M <= 0) {
+    return false;
+  }
+  return !candidate.model.toLowerCase().includes("embedding");
+}
+
 function cheaperCandidates(
   catalog: CatalogModelForRecommendation[],
   current: CatalogModelForRecommendation,
@@ -68,7 +75,8 @@ function cheaperCandidates(
     .filter((candidate) => (sameProviderOnly ? candidate.provider === current.provider : candidate.provider !== current.provider))
     .filter((candidate) => candidate.model !== current.model)
     .filter((candidate) => candidate.status === ACTIVE)
-    .filter((candidate) => configuredProviders.has(candidate.provider))
+    .filter((candidate) => isChatCompletionModel(candidate))
+    .filter((candidate) => sameProviderOnly || configuredProviders.has(candidate.provider))
     .filter((candidate) => catalogSupportsCapabilities(candidate, requiredCapabilities))
     .map((candidate) => ({ candidate, price: blendedTokenPrice(candidate) }))
     .filter(({ price }) => price > 0 && price < currentPrice)
@@ -85,7 +93,7 @@ export function selectRecommendationCandidate(
   const crossMultiplier = options.crossProviderSavingsMultiplier ?? 1.2;
 
   const currentPrice = blendedTokenPrice(currentModel);
-  const required = inferRequiredCapabilities(point.taskName);
+  const required = inferRequiredCapabilities(point.taskName, currentModel);
 
   const sameProviderOptions = cheaperCandidates(catalog, currentModel, currentPrice, required, configuredProviders, true);
   const crossProviderOptions = cheaperCandidates(catalog, currentModel, currentPrice, required, configuredProviders, false);

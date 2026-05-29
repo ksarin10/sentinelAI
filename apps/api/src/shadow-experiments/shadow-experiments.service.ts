@@ -6,6 +6,19 @@ import { RecommendationCandidate } from "../recommendations/recommendation-candi
 import { PassedShadowExperiment } from "./shadow-experiment-engine";
 import { queueShadowExperiment } from "./shadow-experiment-jobs";
 
+function isRetryableShadowFailure(reason: string | null) {
+  if (!reason) {
+    return false;
+  }
+
+  return (
+    reason.includes("No API key configured") ||
+    reason.includes("Not enough baseline traces") ||
+    reason.includes("Stopped early") ||
+    reason.includes("did not meet the quality threshold")
+  );
+}
+
 @Injectable()
 export class ShadowExperimentsService {
   constructor(
@@ -43,12 +56,39 @@ export class ShadowExperimentsService {
         }
       });
 
-      if (experiment.status !== "QUEUED") {
+      const shouldRetryFailed = experiment.status === "FAILED" && isRetryableShadowFailure(experiment.reason);
+
+      if (shouldRetryFailed) {
+        await this.prisma.shadowExperiment.update({
+          where: { id: experiment.id },
+          data: {
+            status: "QUEUED",
+            reason: null,
+            passedRuns: 0,
+            failedRuns: 0,
+            averageCandidateSemantic: null,
+            averageCandidateHallucination: null,
+            completedAt: null
+          }
+        });
+      }
+
+      if (experiment.status !== "QUEUED" && !shouldRetryFailed) {
         continue;
       }
 
       await queueShadowExperiment(this.shadowQueue, experiment.id);
     }
+  }
+
+  async latestFailedReason(projectId: string) {
+    const experiment = await this.prisma.shadowExperiment.findFirst({
+      where: { projectId, status: "FAILED" },
+      orderBy: { completedAt: "desc" },
+      select: { reason: true }
+    });
+
+    return experiment?.reason ?? null;
   }
 
   async experimentCounts(projectId: string) {

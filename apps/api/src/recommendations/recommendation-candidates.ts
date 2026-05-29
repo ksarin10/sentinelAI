@@ -60,7 +60,7 @@ function maxHallucinationRisk(riskLevel: TaskRiskLevel) {
   return 0.25;
 }
 
-function isTaskHealthy(point: TaskModelAnalyticsPoint, profile: TaskProfileForRecommendation) {
+export function isTaskHealthy(point: TaskModelAnalyticsPoint, profile: TaskProfileForRecommendation) {
   if (point.traceCount < 5 || point.errorRate > 0.02) {
     return false;
   }
@@ -73,12 +73,18 @@ function isTaskHealthy(point: TaskModelAnalyticsPoint, profile: TaskProfileForRe
   return true;
 }
 
+export type FindRecommendationCandidatesOptions = {
+  applyMinSavingsFilter?: boolean;
+};
+
 export function findRecommendationCandidates(
   analytics: TaskModelAnalyticsPoint[],
   catalog: ModelCatalogDto[],
   profiles: TaskProfileForRecommendation[] = [],
-  configuredProviders: Set<string> = new Set()
+  configuredProviders: Set<string> = new Set(),
+  options: FindRecommendationCandidatesOptions = {}
 ) {
+  const applyMinSavingsFilter = options.applyMinSavingsFilter !== false;
   const catalogForSelection = catalog.map((entry) => ({
     provider: entry.provider,
     model: entry.model,
@@ -140,7 +146,7 @@ export function findRecommendationCandidates(
       optimizationGoal: profile.optimizationGoal
     };
 
-    if (!passesMinSavings(candidate)) {
+    if (applyMinSavingsFilter && !passesMinSavings(candidate)) {
       return [];
     }
 

@@ -1,11 +1,17 @@
 import { TaskModelAnalyticsPoint } from "../analytics/task-model-analytics";
 import { ModelRecommendation } from "../shadow-experiments/shadow-experiment-engine";
-import { RecommendationCandidate } from "./recommendation-candidates";
+import {
+  isTaskHealthy,
+  minShadowSavingsUsd,
+  RecommendationCandidate,
+  TaskProfileForRecommendation
+} from "./recommendation-candidates";
 
 export type RecommendationEmptyReason =
   | "NO_TRACES"
   | "INSUFFICIENT_TRACES"
   | "TASK_UNHEALTHY"
+  | "SAVINGS_BELOW_THRESHOLD"
   | "NO_PROVIDER_KEYS"
   | "NO_CHEAPER_CANDIDATE"
   | "EXPERIMENTS_RUNNING"
@@ -24,10 +30,31 @@ type InsightInput = {
   traceCount: number;
   analytics: TaskModelAnalyticsPoint[];
   candidates: RecommendationCandidate[];
+  unfilteredCandidates: RecommendationCandidate[];
+  profiles: TaskProfileForRecommendation[];
   configuredProviders: Set<string>;
   pendingExperiments: number;
   failedExperiments: number;
+  latestFailedReason?: string | null;
 };
+
+const defaultTaskProfile = (taskName: string): TaskProfileForRecommendation => ({
+  taskName,
+  riskLevel: "MEDIUM",
+  qualityThreshold: 0.8,
+  optimizationGoal: "BALANCED"
+});
+
+function hasUnhealthyTraffic(analytics: TaskModelAnalyticsPoint[], profiles: TaskProfileForRecommendation[]) {
+  const profilesByTask = new Map(profiles.map((profile) => [profile.taskName, profile]));
+  return analytics.some((point) => {
+    if (point.traceCount < 5) {
+      return false;
+    }
+    const profile = profilesByTask.get(point.taskName) ?? defaultTaskProfile(point.taskName);
+    return !isTaskHealthy(point, profile);
+  });
+}
 
 function taskHasEnoughTraces(analytics: TaskModelAnalyticsPoint[]) {
   const byTask = new Map<string, number>();
@@ -37,16 +64,15 @@ function taskHasEnoughTraces(analytics: TaskModelAnalyticsPoint[]) {
   return [...byTask.values()].some((count) => count >= 5);
 }
 
-function mayNeedCrossProviderKeys(
-  analytics: TaskModelAnalyticsPoint[],
-  candidates: RecommendationCandidate[],
-  configuredProviders: Set<string>
-) {
-  if (candidates.length > 0) {
-    return false;
-  }
-  const providersInUse = new Set(analytics.map((point) => point.provider));
-  return providersInUse.size > 0 && configuredProviders.size === 0;
+function needsCrossProviderKeys(candidates: RecommendationCandidate[], configuredProviders: Set<string>) {
+  return (
+    configuredProviders.size === 0 &&
+    candidates.some((candidate) => candidate.recommendationScope === "CROSS_PROVIDER")
+  );
+}
+
+function blockedByMinSavings(candidates: RecommendationCandidate[], unfilteredCandidates: RecommendationCandidate[]) {
+  return unfilteredCandidates.length > 0 && candidates.length === 0;
 }
 
 export function buildRecommendationInsights(
@@ -92,10 +118,11 @@ export function buildRecommendationInsights(
   }
 
   if (input.failedExperiments > 0 && input.candidates.length > 0) {
+    const detail = input.latestFailedReason ? ` Last failure: ${input.latestFailedReason}` : "";
     return {
       ...base,
       reason: "EXPERIMENTS_FAILED",
-      message: "Shadow verification failed. Check provider keys, quality thresholds, and recent trace health."
+      message: `Shadow verification failed. Check provider keys, quality thresholds, and recent trace health.${detail}`
     };
   }
 
@@ -107,20 +134,28 @@ export function buildRecommendationInsights(
     };
   }
 
-  if (mayNeedCrossProviderKeys(input.analytics, input.candidates, input.configuredProviders)) {
+  if (blockedByMinSavings(input.candidates, input.unfilteredCandidates)) {
+    const floor = minShadowSavingsUsd();
     return {
       ...base,
-      reason: "NO_PROVIDER_KEYS",
-      message: "Add provider API keys under Project settings to enable cross-provider shadow replay."
+      reason: "SAVINGS_BELOW_THRESHOLD",
+      message: `Projected savings are below the shadow floor ($${floor} estimated). Send more traffic or lower SHADOW_MIN_SAVINGS_USD for local testing.`
     };
   }
 
-  const hasTraffic = input.analytics.some((point) => point.traceCount >= 5);
-  if (hasTraffic) {
+  if (hasUnhealthyTraffic(input.analytics, input.profiles)) {
     return {
       ...base,
       reason: "TASK_UNHEALTHY",
       message: "Recent traces do not meet quality or error-rate gates for your task profiles."
+    };
+  }
+
+  if (needsCrossProviderKeys(input.unfilteredCandidates, input.configuredProviders)) {
+    return {
+      ...base,
+      reason: "NO_PROVIDER_KEYS",
+      message: "Add provider API keys under Project settings to verify cross-provider model switches."
     };
   }
 

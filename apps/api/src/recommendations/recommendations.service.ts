@@ -35,11 +35,15 @@ export class RecommendationsService {
     ]);
 
     const configuredProviders = await this.providerCredentials.configuredProviders(projectId);
+    const unfilteredCandidates = findRecommendationCandidates(taskModels, catalog, profiles, configuredProviders, {
+      applyMinSavingsFilter: false
+    });
     const candidates = findRecommendationCandidates(taskModels, catalog, profiles, configuredProviders);
     await this.shadowExperiments.syncCandidates(projectId, candidates);
-    const [passedExperiments, experimentCounts] = await Promise.all([
+    const [passedExperiments, experimentCounts, latestFailedReason] = await Promise.all([
       this.shadowExperiments.listPassed(projectId),
-      this.shadowExperiments.experimentCounts(projectId)
+      this.shadowExperiments.experimentCounts(projectId),
+      this.shadowExperiments.latestFailedReason(projectId)
     ]);
 
     const recommendations = buildVerifiedRecommendations(candidates, passedExperiments, catalog);
@@ -47,9 +51,12 @@ export class RecommendationsService {
       traceCount: summary.traceCount,
       analytics: taskModels,
       candidates,
+      unfilteredCandidates,
+      profiles,
       configuredProviders,
       pendingExperiments: experimentCounts.pendingExperiments,
-      failedExperiments: experimentCounts.failedExperiments
+      failedExperiments: experimentCounts.failedExperiments,
+      latestFailedReason
     });
 
     return { recommendations, insights };

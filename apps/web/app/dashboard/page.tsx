@@ -173,7 +173,9 @@ export default function DashboardPage() {
                 <h2 className="text-base font-semibold">Model Recommendations</h2>
                 <p className="mt-1 text-sm text-muted-foreground">Cheaper model experiments based on task health and catalog pricing.</p>
               </div>
-              <div className="rounded-md bg-[#e8f7f4] px-2.5 py-1 text-xs font-semibold text-primary">{data?.recommendations.length ?? 0} open</div>
+              <div className="rounded-md bg-[#e8f7f4] px-2.5 py-1 text-xs font-semibold text-primary">
+                {(data?.recommendations.length ?? 0) > 0 ? `${data?.recommendations.length} verified` : "None yet"}
+              </div>
             </div>
             <div className="mt-5 space-y-3">
               {(data?.recommendations ?? []).slice(0, 3).map((recommendation) => (
@@ -200,8 +202,8 @@ export default function DashboardPage() {
                   <p>{data?.recommendationInsights.message ?? "No verified recommendations yet."}</p>
                   {(data?.recommendationInsights.pendingExperiments ?? 0) > 0 ? (
                     <p className="mt-2 text-xs">
-                      {data.recommendationInsights.pendingExperiments} shadow verification
-                      {data.recommendationInsights.pendingExperiments === 1 ? "" : "s"} in progress.
+                      {data?.recommendationInsights.pendingExperiments} shadow verification
+                      {(data?.recommendationInsights.pendingExperiments ?? 0) === 1 ? "" : "s"} in progress.
                     </p>
                   ) : null}
                 </div>

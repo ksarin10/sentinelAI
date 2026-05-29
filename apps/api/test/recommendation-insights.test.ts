@@ -40,58 +40,70 @@ const candidate = {
   averageHallucinationRisk: 0.08
 } satisfies RecommendationCandidate;
 
-assert.equal(
-  buildRecommendationInsights([], { traceCount: 0, analytics: [], candidates: [], configuredProviders: new Set(), pendingExperiments: 0, failedExperiments: 0 })
-    .reason,
-  "NO_TRACES"
-);
+const emptyInsightInput = {
+  traceCount: 0,
+  analytics: [] as typeof analytics,
+  candidates: [] as RecommendationCandidate[],
+  unfilteredCandidates: [] as RecommendationCandidate[],
+  profiles: [] as Array<{
+    taskName: string;
+    riskLevel: "MEDIUM";
+    qualityThreshold: number;
+    optimizationGoal: "REDUCE_COST";
+  }>,
+  configuredProviders: new Set<string>(),
+  pendingExperiments: 0,
+  failedExperiments: 0
+};
+
+assert.equal(buildRecommendationInsights([], emptyInsightInput).reason, "NO_TRACES");
 
 assert.equal(
   buildRecommendationInsights([], {
+    ...emptyInsightInput,
     traceCount: 3,
-    analytics: [{ ...analytics[0], traceCount: 3 }],
-    candidates: [],
-    configuredProviders: new Set(["openai"]),
-    pendingExperiments: 0,
-    failedExperiments: 0
+    analytics: [{ ...analytics[0], traceCount: 3 }]
   }).reason,
   "INSUFFICIENT_TRACES"
 );
 
+const withCandidate = {
+  traceCount: 25,
+  analytics,
+  candidates: [candidate],
+  unfilteredCandidates: [candidate],
+  profiles: [
+    {
+      taskName: "support.answer",
+      riskLevel: "MEDIUM" as const,
+      qualityThreshold: 0.8,
+      optimizationGoal: "REDUCE_COST" as const
+    }
+  ],
+  configuredProviders: new Set(["openai"]),
+  pendingExperiments: 0,
+  failedExperiments: 0
+};
+
 assert.equal(
-  buildRecommendationInsights([], {
-    traceCount: 25,
-    analytics,
-    candidates: [candidate],
-    configuredProviders: new Set(["openai"]),
-    pendingExperiments: 2,
-    failedExperiments: 0
-  }).reason,
+  buildRecommendationInsights([], { ...withCandidate, pendingExperiments: 2 }).reason,
   "EXPERIMENTS_RUNNING"
 );
 
 assert.equal(
-  buildRecommendationInsights([], {
-    traceCount: 25,
-    analytics,
-    candidates: [candidate],
-    configuredProviders: new Set(["openai"]),
-    pendingExperiments: 0,
-    failedExperiments: 1
-  }).reason,
+  buildRecommendationInsights([], { ...withCandidate, failedExperiments: 1 }).reason,
   "EXPERIMENTS_FAILED"
 );
 
+assert.equal(buildRecommendationInsights([], withCandidate).reason, "AWAITING_VERIFICATION");
+
 assert.equal(
   buildRecommendationInsights([], {
-    traceCount: 25,
-    analytics,
-    candidates: [candidate],
-    configuredProviders: new Set(["openai"]),
-    pendingExperiments: 0,
-    failedExperiments: 0
+    ...withCandidate,
+    candidates: [],
+    unfilteredCandidates: [candidate]
   }).reason,
-  "AWAITING_VERIFICATION"
+  "SAVINGS_BELOW_THRESHOLD"
 );
 
 const recommendation = {
@@ -119,14 +131,4 @@ const recommendation = {
   }
 } satisfies ModelRecommendation;
 
-assert.equal(
-  buildRecommendationInsights([recommendation], {
-    traceCount: 25,
-    analytics,
-    candidates: [candidate],
-    configuredProviders: new Set(["openai"]),
-    pendingExperiments: 0,
-    failedExperiments: 0
-  }).reason,
-  null
-);
+assert.equal(buildRecommendationInsights([recommendation], withCandidate).reason, null);

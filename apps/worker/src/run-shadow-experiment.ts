@@ -1,8 +1,8 @@
 import { PrismaClient, ShadowExperiment } from "@prisma/client";
 import { evaluateShadowExperimentCompletion, evaluateShadowRun } from "./shadow-experiment-eval";
 import { resolveProviderApiKey } from "./resolve-provider-api-key";
-import { replayCandidatePrompt } from "./shadow-replay";
-import { scoreShadowCandidate } from "./shadow-scoring";
+import { getShadowReplayMode, replayCandidatePrompt } from "./shadow-replay";
+import { scoreShadowReplayRun } from "./shadow-scoring";
 
 const SAMPLE_SIZE = 10;
 
@@ -96,6 +96,12 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
       model: experiment.baselineModel,
       status: "SUCCESS"
     },
+    include: {
+      evaluations: {
+        where: { status: "COMPLETED" },
+        include: { scores: true }
+      }
+    },
     orderBy: { createdAt: "desc" },
     take: SAMPLE_SIZE
   });
@@ -112,8 +118,11 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
     return;
   }
 
-  const candidateApiKey = await resolveProviderApiKey(prisma, experiment.projectId, experiment.candidateProvider);
-  if (!candidateApiKey) {
+  const replayMode = getShadowReplayMode();
+  const candidateApiKey =
+    replayMode === "api" ? await resolveProviderApiKey(prisma, experiment.projectId, experiment.candidateProvider) : null;
+
+  if (replayMode === "api" && !candidateApiKey) {
     await prisma.shadowExperiment.update({
       where: { id: experiment.id },
       data: {
@@ -154,10 +163,10 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
       continue;
     }
 
-    const { semantic: semanticScore, hallucination: hallucinationScore } = await scoreShadowCandidate(
-      trace.prompt,
-      candidateResponse,
-      trace.metadata
+    const { semantic: semanticScore, hallucination: hallucinationScore } = await scoreShadowReplayRun(
+      trace,
+      baselineResponse,
+      candidateResponse
     );
     const result = evaluateShadowRun(semanticScore, hallucinationScore, experiment.qualityThreshold, maxHallucinationRisk());
 

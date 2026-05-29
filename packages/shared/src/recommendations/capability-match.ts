@@ -7,8 +7,12 @@ export type CatalogCapabilities = {
   contextWindow?: number | null;
 };
 
-export function inferRequiredCapabilities(_taskName: string): ModelCapability[] {
-  return [...DEFAULT_REQUIRED_CAPABILITIES];
+export function inferRequiredCapabilities(_taskName: string, current?: CatalogCapabilities): ModelCapability[] {
+  const required: ModelCapability[] = [...DEFAULT_REQUIRED_CAPABILITIES];
+  if (current?.capabilities.includes("tools")) {
+    required.push("tools");
+  }
+  return required;
 }
 
 export function catalogSupportsCapabilities(entry: CatalogCapabilities, required: ModelCapability[]) {

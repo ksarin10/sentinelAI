@@ -6,7 +6,7 @@ const catalog = [
     provider: "openai",
     model: "gpt-4.1",
     status: "ACTIVE",
-    capabilities: ["text", "json"],
+    capabilities: ["text", "tools", "json"],
     inputTokenPricePer1M: 2,
     outputTokenPricePer1M: 8
   },
@@ -14,15 +14,31 @@ const catalog = [
     provider: "openai",
     model: "gpt-4.1-mini",
     status: "ACTIVE",
-    capabilities: ["text", "json"],
+    capabilities: ["text", "tools", "json"],
     inputTokenPricePer1M: 0.4,
     outputTokenPricePer1M: 1.6
+  },
+  {
+    provider: "openai",
+    model: "gpt-4.1-nano",
+    status: "ACTIVE",
+    capabilities: ["text", "json"],
+    inputTokenPricePer1M: 0.1,
+    outputTokenPricePer1M: 0.4
+  },
+  {
+    provider: "openai",
+    model: "text-embedding-3-small",
+    status: "ACTIVE",
+    capabilities: ["embeddings"],
+    inputTokenPricePer1M: 0.02,
+    outputTokenPricePer1M: 0
   },
   {
     provider: "groq",
     model: "llama-3.1-8b-instant",
     status: "ACTIVE",
-    capabilities: ["text", "json"],
+    capabilities: ["text", "tools", "json"],
     inputTokenPricePer1M: 0.05,
     outputTokenPricePer1M: 0.08
   }
@@ -63,3 +79,10 @@ assert.equal(
   })?.recommendedProvider,
   "openai"
 );
+
+const withoutProviderKeys = selectRecommendationCandidate(point, current, catalog, {
+  configuredProviders: new Set()
+});
+
+assert.equal(withoutProviderKeys?.recommendedModel, "gpt-4.1-mini");
+assert.equal(withoutProviderKeys?.recommendationScope, "SAME_PROVIDER");
