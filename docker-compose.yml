@@ -29,13 +29,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql://sentinel:sentinel@postgres:5432/sentinelai?schema=public
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: change-me-in-production
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       API_PORT: 4000
       CORS_ORIGINS: http://localhost:3000
-      RUN_CATALOG_SYNC_ON_START: "true"
+      RUN_CATALOG_SYNC_ON_START: ${RUN_CATALOG_SYNC_ON_START:-true}
+      SHADOW_MIN_SAVINGS_USD: ${SHADOW_MIN_SAVINGS_USD:-0}
+      SHADOW_REPLAY_MODE: ${SHADOW_REPLAY_MODE:-simulate}
+      SHADOW_EARLY_STOP_FAILURES: ${SHADOW_EARLY_STOP_FAILURES:-5}
     ports:
       - "4000:4000"
     depends_on:
@@ -48,10 +53,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.worker
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql://sentinel:sentinel@postgres:5432/sentinelai?schema=public
       REDIS_URL: redis://redis:6379
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EVAL_JUDGE_ENABLED: ${EVAL_JUDGE_ENABLED:-false}
+      EVAL_JUDGE_MODEL: ${EVAL_JUDGE_MODEL:-gpt-4.1-mini}
+      SHADOW_REPLAY_MODE: ${SHADOW_REPLAY_MODE:-simulate}
+      SHADOW_EARLY_STOP_FAILURES: ${SHADOW_EARLY_STOP_FAILURES:-5}
     depends_on:
       postgres:
         condition: service_healthy

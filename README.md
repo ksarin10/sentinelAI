@@ -97,6 +97,12 @@ docker compose up --build api worker web
 
 Set `CORS_ORIGINS=http://localhost:3000` on the API service when using the bundled web container.
 
+Compose loads the repo root `.env` into **api** and **worker** via `env_file`. After changing `.env`, recreate containers (rebuild **web** if you changed `NEXT_PUBLIC_*`):
+
+```bash
+docker compose up -d --build --force-recreate api worker web
+```
+
 ### Smoke test
 
 With the API running locally:

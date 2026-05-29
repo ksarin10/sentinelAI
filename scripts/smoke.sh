@@ -23,10 +23,15 @@ echo "Registered user ${EMAIL}"
 health=$(curl -sf "${API_URL}/health")
 echo "Health: ${health}"
 
+project_payload=$(cat <<EOF
+{"name":"${PROJECT_NAME}","slug":"smoke-$(date +%s)","description":"Smoke test project"}
+EOF
+)
+
 project=$(curl -sf -X POST "${API_URL}/projects" \
   -H "authorization: Bearer ${token}" \
   -H "content-type: application/json" \
-  -d "$(node -e "const slug='smoke-'+Date.now(); process.stdout.write(JSON.stringify({name:process.argv[1],slug,description:'Smoke test project'}))" "${PROJECT_NAME}")")
+  -d "${project_payload}")
 
 project_id=$(node -e "const p=JSON.parse(process.argv[1]); process.stdout.write(p.id)" "${project}")
 
