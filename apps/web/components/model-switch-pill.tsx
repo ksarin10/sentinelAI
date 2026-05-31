@@ -13,7 +13,7 @@ export function ModelSwitchPill({
   return (
     <div
       className={cn(
-        "inline-flex flex-wrap items-center gap-2 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-sm",
+        "inline-flex flex-wrap items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.06] px-3.5 py-2 text-sm shadow-panel",
         className
       )}
     >

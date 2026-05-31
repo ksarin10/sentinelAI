@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, CircleDollarSign, ListTodo, PiggyBank, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "../../components/app-shell";
 import { AlertBanner } from "../../components/alert-banner";
@@ -33,7 +33,8 @@ export default function OverviewPage() {
     <AppShell>
       <div className="page-container space-y-8">
         <PageHeader
-          eyebrow="Overview"
+          hero
+          eyebrow="Verified model switching"
           title="Can I safely switch models and save money?"
           description="Shadow-test real prompts against a cheaper same-provider model. Get a clear Safe to switch, Needs review, or Do not switch verdict with estimated savings."
         >
@@ -70,6 +71,7 @@ export default function OverviewPage() {
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
+            icon={PiggyBank}
             label="Verified savings"
             value={monthlySavings != null && monthlySavings > 0 ? `~$${monthlySavings.toFixed(0)}/mo` : "—"}
             hint={
@@ -80,16 +82,19 @@ export default function OverviewPage() {
             highlight
           />
           <StatCard
+            icon={CircleDollarSign}
             label="Monthly model spend"
             value={`$${monthlyCost.toFixed(0)}`}
             hint={`$${workspace.summary.totalCostUsd.toFixed(2)} observed · ${workspace.summary.traceCount} traces`}
           />
           <StatCard
+            icon={ListTodo}
             label="Most expensive task"
             value={topTask?.taskName ?? "—"}
             hint={topTask ? `${topTask.model} · ${topTask.traceCount} traces` : "Need more traces"}
           />
           <StatCard
+            icon={ShieldCheck}
             label="Latest verification"
             value={
               latestVerification ? (
@@ -108,10 +113,10 @@ export default function OverviewPage() {
 
         <Panel title="Latest verification" description="Shadow-tested on your traffic — not generic benchmarks.">
           {latestVerification && latestVerification.experimentStatus === "PASSED" ? (
-            <div className="space-y-4">
+            <div className="space-y-4 rounded-xl border border-primary/15 bg-gradient-to-br from-primary/[0.04] to-transparent p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">{latestVerification.taskName}</p>
+                  <p className="text-sm font-bold text-foreground">{latestVerification.taskName}</p>
                   <div className="mt-3">
                     <ModelSwitchPill
                       from={latestVerification.currentModel}
@@ -121,7 +126,7 @@ export default function OverviewPage() {
                 </div>
                 <SwitchStatusBadge status={latestVerification.switchStatus} size="lg" />
               </div>
-              <p className="text-sm leading-relaxed text-muted-foreground">{latestVerification.summarySentence}</p>
+              <p className="text-sm leading-relaxed text-foreground/80">{latestVerification.summarySentence}</p>
               <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                 <span>
                   Pass rate{" "}

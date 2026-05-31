@@ -22,7 +22,7 @@ export function VerificationSummaryCard({ verification, detail, replaySampleSize
   const avgQuality = detail?.averageQualityScore ?? verification.averageQualityScore;
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.08] via-card to-card shadow-lift">
+    <section className="hero-surface overflow-hidden shadow-lift">
       <div className="border-b border-primary/10 px-6 py-5 sm:px-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

@@ -5,11 +5,12 @@ import {
   ClipboardList,
   FileSearch,
   LayoutDashboard,
-  Settings,
-  ShieldCheck
+  PlayCircle,
+  Settings
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandLogo } from "./brand-logo";
 import { cn } from "../lib/utils";
 
 const nav = [
@@ -35,17 +36,24 @@ function NavLink({
     <Link
       href={href}
       className={cn(
-        "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+        "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
         active
-          ? "bg-white/10 text-white"
-          : "text-white/60 hover:bg-white/[0.06] hover:text-white"
+          ? "bg-white/12 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+          : "text-white/55 hover:bg-white/[0.07] hover:text-white"
       )}
     >
-      {active ? (
-        <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-accent" aria-hidden />
-      ) : null}
-      <Icon className={cn("h-4 w-4 shrink-0", active && "text-accent")} />
+      <span
+        className={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          active ? "bg-primary/25 text-teal-300" : "bg-white/5 text-white/70 group-hover:bg-white/10"
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
       {label}
+      {active ? (
+        <span className="absolute right-3 h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_8px_hsl(14_88%_56%/0.8)]" aria-hidden />
+      ) : null}
     </Link>
   );
 }
@@ -54,23 +62,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen pb-20 lg:pb-0">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[17.5rem] flex-col border-r border-white/10 bg-sidebar text-sidebar-foreground lg:flex">
-        <div className="flex h-[4.25rem] items-center gap-3 border-b border-white/10 px-5">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-white shadow-lift">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="text-sm font-bold tracking-tight">SentinelAI</div>
-            <div className="text-[11px] text-white/50">Verified model switching</div>
-          </div>
+    <div className="min-h-screen pb-[4.5rem] lg:pb-0">
+      <aside className="sidebar-glow fixed inset-y-0 left-0 z-30 hidden w-[18rem] flex-col border-r border-white/[0.08] text-sidebar-foreground lg:flex">
+        <div className="relative border-b border-white/10 px-5 py-5">
+          <div className="pointer-events-none absolute -right-8 -top-12 h-32 w-32 rounded-full bg-teal-500/20 blur-3xl" />
+          <BrandLogo size="md" showWordmark variant="dark" />
         </div>
 
-        <p className="border-b border-white/10 px-5 py-4 text-xs leading-relaxed text-white/45">
-          Shadow-test real prompts before you downgrade models in production.
+        <p className="px-5 py-4 text-xs leading-relaxed text-white/40">
+          Replay production prompts against cheaper models — with evidence, not guesswork.
         </p>
 
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="flex-1 space-y-1 px-3">
           {nav.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return <NavLink key={item.href} {...item} active={active} />;
@@ -80,14 +83,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="border-t border-white/10 p-4">
           <Link
             href="/verification"
-            className="flex w-full items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:brightness-110"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary-gradient px-4 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110"
           >
+            <PlayCircle className="h-4 w-4" />
             Run verification
           </Link>
         </div>
       </aside>
 
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-card/95 px-2 py-2 backdrop-blur-lg lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-card/90 px-1 py-1.5 backdrop-blur-xl lg:hidden">
         {nav.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
@@ -95,8 +99,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10px] font-semibold",
-                active ? "text-primary" : "text-muted-foreground"
+                "flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2 text-[10px] font-semibold transition",
+                active ? "bg-primary/10 text-primary" : "text-muted-foreground"
               )}
             >
               <item.icon className="h-5 w-5" />
@@ -106,18 +110,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         })}
       </nav>
 
-      <main className="lg:pl-[17.5rem]">
-        <header className="sticky top-0 z-20 border-b border-border/80 bg-background/85 backdrop-blur-md">
-          <div className="flex h-14 items-center px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-2 lg:hidden">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white">
-                <ShieldCheck className="h-4 w-4" />
-              </div>
-              <span className="text-sm font-bold">SentinelAI</span>
+      <main className="lg:pl-[18rem]">
+        <header className="sticky top-0 z-20 border-b border-border/60 bg-background/70 backdrop-blur-xl">
+          <div className="flex h-[3.25rem] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-2.5 lg:hidden">
+              <BrandLogo size="sm" />
+              <span className="text-sm font-bold tracking-tight">SentinelAI</span>
             </div>
-            <p className="hidden text-sm text-muted-foreground lg:block">
+            <p className="hidden text-sm font-medium text-muted-foreground lg:block">
               Can I safely switch models and save money?
             </p>
+            <div className="hidden h-2 w-2 rounded-full bg-primary shadow-[0_0_10px_hsl(168_65%_40%/0.6)] lg:block" aria-hidden />
           </div>
         </header>
         {children}
