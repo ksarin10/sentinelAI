@@ -1,4 +1,10 @@
-import type { AnalyticsPoint, AnalyticsSummary, EvaluationStatus, TraceStatus } from "@sentinelai/shared";
+import type {
+  AnalyticsPoint,
+  AnalyticsSummary,
+  EvaluationStatus,
+  SwitchRecommendationStatus,
+  TraceStatus
+} from "@sentinelai/shared";
 
 export type AuthResponse = {
   accessToken: string;
@@ -93,7 +99,8 @@ export type RecommendationEmptyReason =
   | "NO_CHEAPER_CANDIDATE"
   | "EXPERIMENTS_RUNNING"
   | "EXPERIMENTS_FAILED"
-  | "AWAITING_VERIFICATION";
+  | "AWAITING_VERIFICATION"
+  | "SUGGESTIONS_NEED_KEYS";
 
 export type RecommendationInsightsRecord = {
   reason: RecommendationEmptyReason | null;
@@ -103,9 +110,74 @@ export type RecommendationInsightsRecord = {
   candidateCount: number;
 };
 
+export type RecommendationSuggestionRecord = {
+  taskName: string;
+  currentProvider: string;
+  currentModel: string;
+  recommendedProvider: string;
+  recommendedModel: string;
+  recommendationScope: "SAME_PROVIDER" | "CROSS_PROVIDER";
+  estimatedSavingsUsd: number;
+  estimatedSavingsPercent: number;
+  verificationBlockReason: string;
+};
+
+export type ProviderCapabilityRecord = {
+  provider: string;
+  catalogSupported: boolean;
+  shadowReplaySupported: boolean;
+  keyConfigured: boolean;
+  canVerifyCrossProvider: boolean;
+  canVerifySameProviderSimulate: boolean;
+};
+
+export type ShadowEconomicsRecord = {
+  maxReplaysPerExperiment: number;
+  maxExperimentsPerProjectPerDay: number;
+  maxReplayCallsPerProjectPerDay: number;
+  minSavingsUsd: number;
+  earlyStopFailures: number;
+};
+
 export type RecommendationsResponse = {
   recommendations: ModelRecommendationRecord[];
+  suggestions: RecommendationSuggestionRecord[];
+  providerCapabilities: ProviderCapabilityRecord[];
+  economics: ShadowEconomicsRecord;
   insights: RecommendationInsightsRecord;
+};
+
+export type VerificationRecord = {
+  id: string;
+  taskName: string;
+  currentProvider: string;
+  currentModel: string;
+  candidateProvider: string;
+  candidateModel: string;
+  experimentStatus: string;
+  switchStatus: SwitchRecommendationStatus;
+  switchStatusLabel: string;
+  passRate: number | null;
+  passedRuns: number;
+  failedRuns: number;
+  averageQualityScore: number | null;
+  averageHallucinationRisk: number | null;
+  estimatedSavingsPercent: number | null;
+  qualityThreshold: number;
+  reason: string | null;
+  completedAt: string | null;
+  updatedAt: string;
+};
+
+export type VerificationDetailRecord = VerificationRecord & {
+  runs: Array<{
+    id: string;
+    traceId: string;
+    semanticScore: number;
+    hallucinationScore: number;
+    passed: boolean;
+    createdAt: string;
+  }>;
 };
 
 export type ModelRecommendationRecord = {
@@ -114,7 +186,11 @@ export type ModelRecommendationRecord = {
   currentModel: string;
   recommendedProvider: string;
   recommendedModel: string;
+  recommendationScope: "SAME_PROVIDER" | "CROSS_PROVIDER";
   recommendationType: "REDUCE_COST" | string;
+  switchStatus: SwitchRecommendationStatus;
+  switchStatusLabel: string;
+  passRate: number | null;
   confidence: "LOW" | "MEDIUM" | "HIGH";
   estimatedSavingsUsd: number;
   estimatedSavingsPercent: number;
@@ -129,6 +205,7 @@ export type ModelRecommendationRecord = {
     qualityThreshold: number;
     riskLevel: "LOW" | "MEDIUM" | "HIGH";
     optimizationGoal: string;
+    verifiedRuns?: number;
   };
 };
 
@@ -182,6 +259,9 @@ export type DashboardData = {
   timeseries: AnalyticsPoint[];
   traces: TraceRecord[];
   recommendations: ModelRecommendationRecord[];
+  recommendationSuggestions: RecommendationSuggestionRecord[];
   recommendationInsights: RecommendationInsightsRecord;
+  providerCapabilities: ProviderCapabilityRecord[];
+  shadowEconomics: ShadowEconomicsRecord;
   modelMigrations: ModelMigrationRecord[];
 };

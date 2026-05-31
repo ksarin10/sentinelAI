@@ -26,8 +26,8 @@ export function TraceTable({ traces, projectId }: { traces: TraceRecord[]; proje
     <Card className="overflow-hidden">
       <div className="flex items-center justify-between border-b border-border p-5">
         <div>
-          <h2 className="text-base font-semibold">Trace Ledger</h2>
-          <p className="text-sm text-muted-foreground">Recent model calls with quality and cost signals.</p>
+          <h2 className="text-base font-semibold">Production traces</h2>
+          <p className="text-sm text-muted-foreground">Evidence sampled during shadow verification.</p>
         </div>
         <div className="hidden rounded-md border border-border bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground sm:block">{traces.length} records</div>
       </div>
