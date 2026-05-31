@@ -1,18 +1,16 @@
 import { PrismaClient, ShadowExperiment } from "@prisma/client";
+import {
+  isCrossProviderRecommendation,
+  planShadowVerification,
+  readShadowEconomicsConfig
+} from "@sentinelai/shared";
 import { evaluateShadowExperimentCompletion, evaluateShadowRun } from "./shadow-experiment-eval";
 import { resolveProviderApiKey } from "./resolve-provider-api-key";
 import { getShadowReplayMode, replayCandidatePrompt } from "./shadow-replay";
 import { scoreShadowReplayRun } from "./shadow-scoring";
 
-const SAMPLE_SIZE = 10;
-
 function maxHallucinationRisk() {
   return 0.25;
-}
-
-function shadowEarlyStopFailures() {
-  const parsed = Number(process.env.SHADOW_EARLY_STOP_FAILURES ?? 5);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5;
 }
 
 async function markExperimentFromProductionTraffic(prisma: PrismaClient, experiment: ShadowExperiment) {
@@ -74,8 +72,33 @@ async function markExperimentFromProductionTraffic(prisma: PrismaClient, experim
 }
 
 export async function runShadowExperiment(prisma: PrismaClient, experimentId: string) {
+  const economics = readShadowEconomicsConfig(process.env);
   const experiment = await prisma.shadowExperiment.findUnique({ where: { id: experimentId } });
   if (!experiment || experiment.status !== "QUEUED") {
+    return;
+  }
+
+  const isCrossProvider = isCrossProviderRecommendation(experiment.baselineProvider, experiment.candidateProvider);
+  const replayMode = getShadowReplayMode();
+  const candidateApiKey =
+    replayMode === "api" ? await resolveProviderApiKey(prisma, experiment.projectId, experiment.candidateProvider) : null;
+
+  const verificationPlan = planShadowVerification({
+    baselineProvider: experiment.baselineProvider,
+    candidateProvider: experiment.candidateProvider,
+    candidateProviderHasKey: Boolean(candidateApiKey),
+    shadowReplayMode: replayMode
+  });
+
+  if (!verificationPlan.canRun) {
+    await prisma.shadowExperiment.update({
+      where: { id: experiment.id },
+      data: {
+        status: "FAILED",
+        reason: verificationPlan.reason,
+        completedAt: new Date()
+      }
+    });
     return;
   }
 
@@ -103,7 +126,7 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
       }
     },
     orderBy: { createdAt: "desc" },
-    take: SAMPLE_SIZE
+    take: economics.maxReplaysPerExperiment
   });
 
   if (traces.length < 5) {
@@ -118,32 +141,17 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
     return;
   }
 
-  const replayMode = getShadowReplayMode();
-  const candidateApiKey =
-    replayMode === "api" ? await resolveProviderApiKey(prisma, experiment.projectId, experiment.candidateProvider) : null;
-
-  if (replayMode === "api" && !candidateApiKey) {
-    await prisma.shadowExperiment.update({
-      where: { id: experiment.id },
-      data: {
-        status: "FAILED",
-        reason: `No API key configured for ${experiment.candidateProvider}. Add a provider key under Project settings to run cross-provider shadow replay.`,
-        completedAt: new Date()
-      }
-    });
-    return;
-  }
+  const allowSimulate = !isCrossProvider;
+  const usedSimulate = allowSimulate && replayMode === "simulate";
 
   let passedRuns = 0;
   let failedRuns = 0;
-  let consecutiveFailures = 0;
-  const earlyStopAfter = shadowEarlyStopFailures();
   const semanticTotals: number[] = [];
   const hallucinationTotals: number[] = [];
   let stoppedEarly = false;
 
   for (const trace of traces) {
-    if (failedRuns >= earlyStopAfter && passedRuns === 0) {
+    if (failedRuns >= economics.earlyStopFailures && passedRuns === 0) {
       stoppedEarly = true;
       break;
     }
@@ -154,28 +162,27 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
       experiment.candidateProvider,
       experiment.candidateModel,
       baselineResponse,
-      candidateApiKey
+      candidateApiKey,
+      { allowSimulate }
     );
 
     if (!candidateResponse) {
       failedRuns += 1;
-      consecutiveFailures += 1;
       continue;
     }
 
     const { semantic: semanticScore, hallucination: hallucinationScore } = await scoreShadowReplayRun(
       trace,
       baselineResponse,
-      candidateResponse
+      candidateResponse,
+      { isCrossProvider, usedSimulate }
     );
     const result = evaluateShadowRun(semanticScore, hallucinationScore, experiment.qualityThreshold, maxHallucinationRisk());
 
     if (result.passed) {
       passedRuns += 1;
-      consecutiveFailures = 0;
     } else {
       failedRuns += 1;
-      consecutiveFailures += 1;
     }
 
     semanticTotals.push(semanticScore);
@@ -194,13 +201,8 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
     });
   }
 
-  const completion = evaluateShadowExperimentCompletion(passedRuns, failedRuns, SAMPLE_SIZE);
-  const averageCandidateSemantic =
-    semanticTotals.length === 0 ? null : Number((semanticTotals.reduce((sum, score) => sum + score, 0) / semanticTotals.length).toFixed(3));
-  const averageCandidateHallucination =
-    hallucinationTotals.length === 0
-      ? null
-      : Number((hallucinationTotals.reduce((sum, score) => sum + score, 0) / hallucinationTotals.length).toFixed(3));
+  const completion = evaluateShadowExperimentCompletion(passedRuns, failedRuns, economics.maxReplaysPerExperiment);
+  const scopeLabel = isCrossProvider ? "cross-provider" : "same-provider";
 
   await prisma.shadowExperiment.update({
     where: { id: experiment.id },
@@ -208,10 +210,14 @@ export async function runShadowExperiment(prisma: PrismaClient, experimentId: st
       status: completion.passed ? "PASSED" : "FAILED",
       passedRuns,
       failedRuns,
-      averageCandidateSemantic,
-      averageCandidateHallucination,
+      averageCandidateSemantic:
+        semanticTotals.length === 0 ? null : Number((semanticTotals.reduce((sum, score) => sum + score, 0) / semanticTotals.length).toFixed(3)),
+      averageCandidateHallucination:
+        hallucinationTotals.length === 0
+          ? null
+          : Number((hallucinationTotals.reduce((sum, score) => sum + score, 0) / hallucinationTotals.length).toFixed(3)),
       reason: completion.passed
-        ? "Background shadow verification passed on sampled traffic."
+        ? `Background ${scopeLabel} shadow verification passed on sampled traffic.`
         : stoppedEarly
           ? `Stopped early after ${failedRuns} failed replays without a passing sample.`
           : "Background shadow verification did not meet the quality threshold.",

@@ -20,7 +20,10 @@ async function main() {
     ]
   };
 
-  const scores = await scoreShadowReplayRun(trace, trace.response!, trace.response!);
+  const scores = await scoreShadowReplayRun(trace, trace.response!, trace.response!, {
+    isCrossProvider: false,
+    usedSimulate: true
+  });
   assert.equal(scores.semantic, 0.86);
   assert.equal(scores.hallucination, 0.08);
 

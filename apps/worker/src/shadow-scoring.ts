@@ -1,6 +1,5 @@
 import { scoreTraceEvaluation } from "./run-evaluation";
-import { getShadowReplayMode } from "./shadow-replay";
-import { hallucinationRisk, semanticSimilarity } from "./scoring";
+import { semanticSimilarity } from "./scoring";
 
 export type TraceForShadowScoring = {
   prompt: string;
@@ -37,9 +36,10 @@ function scoresFromCompletedEvaluation(trace: TraceForShadowScoring) {
 export async function scoreShadowReplayRun(
   trace: TraceForShadowScoring,
   baselineResponse: string,
-  candidateResponse: string
+  candidateResponse: string,
+  options: { isCrossProvider: boolean; usedSimulate: boolean }
 ) {
-  if (getShadowReplayMode() === "simulate") {
+  if (!options.isCrossProvider && options.usedSimulate) {
     const fromEvaluation = scoresFromCompletedEvaluation(trace);
     if (fromEvaluation) {
       return fromEvaluation;
@@ -47,7 +47,7 @@ export async function scoreShadowReplayRun(
 
     return {
       semantic: semanticSimilarity(baselineResponse, candidateResponse).score,
-      hallucination: hallucinationRisk(trace.prompt, candidateResponse).score
+      hallucination: (await scoreShadowCandidate(trace.prompt, candidateResponse, trace.metadata)).hallucination
     };
   }
 
