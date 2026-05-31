@@ -1,10 +1,12 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "../../components/app-shell";
-import { ProjectSelector } from "../../components/project-selector";
+import { AlertBanner } from "../../components/alert-banner";
+import { ModelSwitchPill } from "../../components/model-switch-pill";
+import { PageHeader } from "../../components/page-header";
 import { SwitchStatusBadge } from "../../components/switch-status-badge";
+import { WorkspaceToolbar } from "../../components/workspace-toolbar";
 import { Button } from "../../components/ui/button";
 import { saveSelectedProjectId } from "../../lib/auth";
 import { buildTaskSummaries } from "../../lib/task-summary";
@@ -16,81 +18,84 @@ export default function TasksPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-6xl space-y-6 p-5 lg:p-8">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <h1 className="text-2xl font-semibold">Tasks</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Each task groups production traffic so SentinelAI can suggest and verify a same-provider downgrade.
-            </p>
-          </div>
-          <ProjectSelector
+      <div className="page-container space-y-8">
+        <PageHeader
+          eyebrow="Tasks"
+          title="Production tasks"
+          description="Traffic grouped by task name. SentinelAI finds and verifies same-provider downgrade paths per task."
+        >
+          <WorkspaceToolbar
             projects={workspace.projects}
             projectId={workspace.projectId}
-            onChange={(id) => {
+            onProjectChange={(id) => {
               saveSelectedProjectId(id);
               void workspace.refresh(workspace.token, id);
             }}
+            showVerification={false}
           />
-        </div>
+        </PageHeader>
 
-        {workspace.error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{workspace.error}</div> : null}
+        {workspace.error ? <AlertBanner variant="error">{workspace.error}</AlertBanner> : null}
 
         {taskSummaries.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-white p-6 text-sm text-muted-foreground">
-            Need more traces before verification. Ingest production traffic or{" "}
-            <Link href="/settings" className="font-medium text-primary">
-              load demo data
+          <AlertBanner>
+            Need more traces.{" "}
+            <Link href="/settings" className="font-semibold text-primary hover:underline">
+              Load demo data
             </Link>
             .
-          </div>
+          </AlertBanner>
         ) : (
           <div className="grid gap-4">
             {taskSummaries.map((task) => (
-              <div key={task.taskName} className="rounded-lg border border-border bg-white p-5 shadow-panel">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+              <article
+                key={task.taskName}
+                className="rounded-2xl border border-border bg-card p-6 shadow-panel transition hover:shadow-lift"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <h2 className="text-lg font-semibold">{task.taskName}</h2>
+                    <h2 className="font-display text-xl tracking-tight">{task.taskName}</h2>
                     <p className="mt-1 text-sm text-muted-foreground">{task.statusLabel}</p>
                   </div>
-                  {task.recommendation ? <SwitchStatusBadge status={task.recommendation.switchStatus} /> : null}
+                  {task.recommendation ? <SwitchStatusBadge status={task.recommendation.switchStatus} size="lg" /> : null}
                 </div>
-                <div className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Model</div>
-                    <div className="mt-1 font-medium">{task.model}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Traces</div>
-                    <div className="mt-1 font-medium">{task.traceCount}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Avg cost</div>
-                    <div className="mt-1 font-medium">${task.averageCostUsd.toFixed(4)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Avg latency</div>
-                    <div className="mt-1 font-medium">{Math.round(task.averageLatencyMs)} ms</div>
-                  </div>
-                </div>
-                {task.recommendation ? (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/50 px-4 py-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <span>{task.recommendation.currentModel}</span>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      <span className="font-medium">{task.recommendation.recommendedModel}</span>
+
+                <dl className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  {[
+                    { label: "Model", value: task.model },
+                    { label: "Traces", value: task.traceCount.toLocaleString() },
+                    { label: "Avg cost", value: `$${task.averageCostUsd.toFixed(4)}` },
+                    { label: "Avg latency", value: `${Math.round(task.averageLatencyMs)} ms` }
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <dt className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {item.label}
+                      </dt>
+                      <dd className="mt-1 font-semibold tabular-nums">{item.value}</dd>
                     </div>
-                    <span className="font-semibold text-primary">{task.recommendation.estimatedSavingsPercent}% est. savings</span>
+                  ))}
+                </dl>
+
+                {task.recommendation ? (
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/50 px-4 py-3">
+                    <ModelSwitchPill
+                      from={task.recommendation.currentModel}
+                      to={task.recommendation.recommendedModel}
+                    />
+                    <span className="text-sm font-bold text-primary">
+                      {task.recommendation.estimatedSavingsPercent}% est. savings
+                    </span>
                   </div>
                 ) : null}
-                <div className="mt-4">
+
+                <div className="mt-5">
                   <Link href={`/verification?task=${encodeURIComponent(task.taskName)}`}>
-                    <Button className="h-8 bg-white px-3 text-foreground ring-1 ring-border">
+                    <Button variant="secondary" size="sm">
                       Open verification
                     </Button>
                   </Link>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         )}

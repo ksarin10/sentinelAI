@@ -1,11 +1,13 @@
 "use client";
 
-import { Database, KeyRound, Plus, RefreshCw } from "lucide-react";
+import { Database, Plus, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { AppShell } from "../../components/app-shell";
+import { AlertBanner } from "../../components/alert-banner";
+import { PageHeader } from "../../components/page-header";
+import { Panel } from "../../components/panel";
 import { Button } from "../../components/ui/button";
-import { Card } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { apiRequest } from "../../lib/api";
 import { getSelectedProjectId, getToken, saveSelectedProjectId } from "../../lib/auth";
@@ -142,28 +144,27 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-4xl space-y-6 p-5 lg:p-8">
-        <div>
-          <h1 className="text-2xl font-semibold">Settings</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Connect OpenAI for verification replay, set quality thresholds, and manage ingestion keys.
-          </p>
-        </div>
-        {error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div> : null}
-        {notice ? <div className="rounded-md border border-teal-200 bg-teal-50 p-3 text-sm text-teal-800">{notice}</div> : null}
+      <div className="page-container mx-auto max-w-3xl space-y-8">
+        <PageHeader
+          eyebrow="Settings"
+          title="Workspace setup"
+          description="OpenAI key for live replay, quality thresholds per task, and ingestion keys for your app."
+        />
 
-        <Card className="p-5">
-          <h2 className="text-base font-semibold">Project</h2>
-          <form className="mt-4 flex flex-wrap gap-3" onSubmit={createProject}>
+        {error ? <AlertBanner variant="error">{error}</AlertBanner> : null}
+        {notice ? <AlertBanner variant="success">{notice}</AlertBanner> : null}
+
+        <Panel title="Project">
+          <form className="flex flex-wrap gap-3" onSubmit={createProject}>
             <Input className="max-w-xs" value={name} onChange={(e) => setName(e.target.value)} placeholder="My AI product" required />
-            <Button disabled={!token}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create project
+            <Button disabled={!token} size="sm">
+              <Plus className="h-4 w-4" />
+              Create
             </Button>
           </form>
           {projects.length > 0 ? (
             <select
-              className="mt-4 h-10 rounded-md border border-border bg-white px-3 text-sm"
+              className="mt-4 h-10 w-full max-w-md appearance-none rounded-xl border border-border bg-card px-3.5 text-sm font-medium shadow-panel outline-none focus:ring-2 focus:ring-primary/15"
               value={selectedProjectId}
               onChange={(e) => {
                 setSelectedProjectId(e.target.value);
@@ -178,21 +179,17 @@ export default function SettingsPage() {
               ))}
             </select>
           ) : null}
-        </Card>
+        </Panel>
 
         {selectedProject ? (
           <>
-            <Card className="p-5">
-              <div className="flex items-center gap-2">
-                <KeyRound className="h-5 w-5 text-primary" />
-                <h2 className="text-base font-semibold">OpenAI API key</h2>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Required for shadow replay when verifying a cheaper OpenAI model. You pay replay cost directly to OpenAI.
-              </p>
-              <form className="mt-4 flex flex-wrap gap-3" onSubmit={saveOpenAiKey}>
+            <Panel
+              title="OpenAI API key"
+              description="Required for live shadow replay (SHADOW_REPLAY_MODE=api). You pay replay cost directly to OpenAI."
+            >
+              <form className="flex flex-wrap gap-3" onSubmit={saveOpenAiKey}>
                 <Input
-                  className="min-w-[280px] flex-1"
+                  className="min-w-[240px] flex-1"
                   type="password"
                   value={providerApiKey}
                   onChange={(e) => setProviderApiKey(e.target.value)}
@@ -200,21 +197,21 @@ export default function SettingsPage() {
                   minLength={8}
                   required
                 />
-                <Button type="submit">Save key</Button>
+                <Button type="submit" size="sm">
+                  Save key
+                </Button>
               </form>
-              {providerCredentials.filter((c) => c.provider === "openai").map((c) => (
-                <div key={c.provider} className="mt-3 text-sm text-muted-foreground">
-                  Saved: {c.keyHint}
-                </div>
-              ))}
-            </Card>
+              {providerCredentials
+                .filter((c) => c.provider === "openai")
+                .map((c) => (
+                  <p key={c.provider} className="mt-3 text-sm text-muted-foreground">
+                    Saved: {c.keyHint}
+                  </p>
+                ))}
+            </Panel>
 
-            <Card className="p-5">
-              <h2 className="text-base font-semibold">Evaluation threshold</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Verification passes when replayed responses meet this semantic quality floor.
-              </p>
-              <form className="mt-4 flex flex-wrap gap-3" onSubmit={saveTaskProfile}>
+            <Panel title="Quality threshold" description="Replays pass when semantic score meets this floor.">
+              <form className="flex flex-wrap gap-3" onSubmit={saveTaskProfile}>
                 <Input value={taskName} onChange={(e) => setTaskName(e.target.value)} placeholder="support.answer" className="max-w-[200px]" />
                 <Input
                   type="number"
@@ -223,41 +220,43 @@ export default function SettingsPage() {
                   step="0.05"
                   value={taskQualityThreshold}
                   onChange={(e) => setTaskQualityThreshold(e.target.value)}
-                  className="max-w-[120px]"
+                  className="max-w-[100px]"
                 />
-                <Button type="submit">Save threshold</Button>
+                <Button type="submit" size="sm">
+                  Save
+                </Button>
               </form>
               {taskProfiles.map((profile) => (
-                <div key={profile.id} className="mt-3 text-sm text-muted-foreground">
+                <p key={profile.id} className="mt-3 text-sm text-muted-foreground">
                   {profile.taskName}: quality ≥ {profile.qualityThreshold}
-                </div>
+                </p>
               ))}
-            </Card>
+            </Panel>
 
-            <Card className="p-5">
-              <h2 className="text-base font-semibold">Trace ingestion key</h2>
-              <form className="mt-4 flex flex-wrap gap-3" onSubmit={createApiKey}>
-                <Input value={keyName} onChange={(e) => setKeyName(e.target.value)} className="max-w-xs" />
-                <Button>Create ingestion key</Button>
+            <Panel title="Ingestion API key">
+              <form className="flex flex-wrap gap-3" onSubmit={createApiKey}>
+                <Input value={keyName} onChange={(e) => setKeyName(e.target.value)} className="max-w-xs flex-1" />
+                <Button size="sm">Create key</Button>
               </form>
-            </Card>
+            </Panel>
 
-            <Card className="border-teal-200 bg-teal-50/60 p-5">
-              <h2 className="text-base font-semibold">Demo data</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Loads the SupportBot Demo story: 14 support.answer traces on gpt-4.1 (one borderline-quality row). Run
-                verification from Overview to shadow-test gpt-4.1-mini — no cross-provider setup required in simulate mode.
+            <div className="rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[0.08] to-card p-6 shadow-panel">
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-primary" />
+                <h2 className="text-base font-semibold">Demo walkthrough</h2>
+              </div>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Loads SupportBot Demo: 14 support.answer traces on gpt-4.1, then verify gpt-4.1-mini in simulate mode.
               </p>
-              <Button className="mt-4 bg-white text-foreground ring-1 ring-teal-300" onClick={seedDemo} disabled={seedingDemo}>
-                <Database className="mr-2 h-4 w-4" />
+              <Button className="mt-4" variant="secondary" onClick={seedDemo} disabled={seedingDemo}>
                 {seedingDemo ? "Loading…" : "Load demo traffic"}
               </Button>
-            </Card>
+            </div>
           </>
         ) : null}
 
-        <Button className="bg-white text-foreground ring-1 ring-border" onClick={() => load()}>
-          <RefreshCw className="mr-2 h-4 w-4" />
+        <Button variant="secondary" size="sm" onClick={() => load()}>
+          <RefreshCw className="h-4 w-4" />
           Refresh
         </Button>
         {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}

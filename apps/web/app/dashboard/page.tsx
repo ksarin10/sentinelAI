@@ -1,12 +1,16 @@
 "use client";
 
-import { ArrowRight, Loader2, PlayCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { AppShell } from "../../components/app-shell";
-import { ProjectSelector } from "../../components/project-selector";
+import { AlertBanner } from "../../components/alert-banner";
+import { ModelSwitchPill } from "../../components/model-switch-pill";
+import { PageHeader } from "../../components/page-header";
+import { Panel } from "../../components/panel";
+import { StatCard } from "../../components/stat-card";
 import { SwitchStatusBadge } from "../../components/switch-status-badge";
 import { VerificationProgress } from "../../components/verification-progress";
-import { Button } from "../../components/ui/button";
+import { WorkspaceToolbar } from "../../components/workspace-toolbar";
 import { buildTaskSummaries, estimatedMonthlyCost, topExpensiveTask } from "../../lib/task-summary";
 import { useProjectWorkspace } from "../../lib/use-project-workspace";
 import { saveSelectedProjectId } from "../../lib/auth";
@@ -27,48 +31,25 @@ export default function OverviewPage() {
 
   return (
     <AppShell>
-      <div className="mx-auto max-w-6xl space-y-6 p-5 lg:p-8">
-        <section className="rounded-lg border border-border bg-white p-6 shadow-panel">
-          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-start">
-            <div className="max-w-2xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d96b4a]">Verified model switching</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight">Can I safely switch models and save money?</h1>
-              <p className="mt-3 text-sm text-muted-foreground">
-                SentinelAI shadow-tests your real prompts against a cheaper same-provider model, scores quality on each
-                replay, and recommends Safe to switch, Needs review, or Do not switch before you change production.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <ProjectSelector
-                projects={workspace.projects}
-                projectId={workspace.projectId}
-                onChange={(id) => {
-                  saveSelectedProjectId(id);
-                  void workspace.refresh(workspace.token, id);
-                }}
-              />
-              <Button
-                className="bg-white text-foreground ring-1 ring-border"
-                onClick={() => workspace.refresh()}
-                disabled={workspace.verificationBusy}
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh
-              </Button>
-              <Button
-                onClick={() => void workspace.runVerification()}
-                disabled={!workspace.token || !workspace.projectId || workspace.verificationBusy}
-              >
-                {workspace.verificationBusy ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <PlayCircle className="mr-2 h-4 w-4" />
-                )}
-                {workspace.verificationBusy ? "Verifying…" : "Run verification"}
-              </Button>
-            </div>
-          </div>
-        </section>
+      <div className="page-container space-y-8">
+        <PageHeader
+          eyebrow="Overview"
+          title="Can I safely switch models and save money?"
+          description="Shadow-test real prompts against a cheaper same-provider model. Get a clear Safe to switch, Needs review, or Do not switch verdict with estimated savings."
+        >
+          <WorkspaceToolbar
+            projects={workspace.projects}
+            projectId={workspace.projectId}
+            onProjectChange={(id) => {
+              saveSelectedProjectId(id);
+              void workspace.refresh(workspace.token, id);
+            }}
+            onRefresh={() => workspace.refresh()}
+            onRunVerification={() => void workspace.runVerification()}
+            verificationBusy={workspace.verificationBusy}
+            refreshDisabled={workspace.verificationBusy}
+          />
+        </PageHeader>
 
         <VerificationProgress
           phase={workspace.verificationPhase ?? (workspace.verificationBusy ? "running" : null)}
@@ -78,141 +59,132 @@ export default function OverviewPage() {
         />
 
         {workspace.ready && !workspace.token ? (
-          <div className="rounded-md border border-border bg-white p-4 text-sm">
-            <Link className="font-medium text-primary" href="/login">
+          <AlertBanner>
+            <Link className="font-semibold text-primary hover:underline" href="/login">
               Sign in
             </Link>{" "}
             to verify model switches on your traffic.
-          </div>
+          </AlertBanner>
         ) : null}
-        {workspace.error ? <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{workspace.error}</div> : null}
+        {workspace.error ? <AlertBanner variant="error">{workspace.error}</AlertBanner> : null}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verified savings opportunity</div>
-            <div className="mt-2 text-2xl font-semibold text-primary">
-              {monthlySavings != null && monthlySavings > 0 ? `~$${monthlySavings.toFixed(0)}/mo` : "—"}
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {primaryRecommendation
+          <StatCard
+            label="Verified savings"
+            value={monthlySavings != null && monthlySavings > 0 ? `~$${monthlySavings.toFixed(0)}/mo` : "—"}
+            hint={
+              primaryRecommendation
                 ? `${primaryRecommendation.estimatedSavingsPercent}% on ${primaryRecommendation.taskName}`
-                : "Run verification after ingesting traces"}
-            </div>
-          </div>
-          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current monthly model spend</div>
-            <div className="mt-2 text-2xl font-semibold">${monthlyCost.toFixed(0)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              ${workspace.summary.totalCostUsd.toFixed(2)} observed · {workspace.summary.traceCount} traces
-            </div>
-          </div>
-          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Most expensive task</div>
-            <div className="mt-2 text-lg font-semibold">{topTask?.taskName ?? "—"}</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {topTask ? `${topTask.model} · ${topTask.traceCount} traces` : "Need more traces"}
-            </div>
-          </div>
-          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest verification</div>
-            <div className="mt-2">
-              {latestVerification ? (
-                <SwitchStatusBadge status={latestVerification.switchStatus} />
+                : "Run verification after ingesting traces"
+            }
+            highlight
+          />
+          <StatCard
+            label="Monthly model spend"
+            value={`$${monthlyCost.toFixed(0)}`}
+            hint={`$${workspace.summary.totalCostUsd.toFixed(2)} observed · ${workspace.summary.traceCount} traces`}
+          />
+          <StatCard
+            label="Most expensive task"
+            value={topTask?.taskName ?? "—"}
+            hint={topTask ? `${topTask.model} · ${topTask.traceCount} traces` : "Need more traces"}
+          />
+          <StatCard
+            label="Latest verification"
+            value={
+              latestVerification ? (
+                <SwitchStatusBadge status={latestVerification.switchStatus} size="lg" />
               ) : (
-                <span className="text-sm text-muted-foreground">Not run</span>
-              )}
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {latestVerification?.passRate != null
-                ? `${(latestVerification.passRate * 100).toFixed(1)}% pass rate on ${latestVerification.totalReplayRuns} replays`
-                : "Shadow-test on your traffic"}
-            </div>
-          </div>
+                "Not run"
+              )
+            }
+            hint={
+              latestVerification?.passRate != null
+                ? `${(latestVerification.passRate * 100).toFixed(1)}% on ${latestVerification.totalReplayRuns} replays`
+                : "Shadow-test on your traffic"
+            }
+          />
         </div>
 
-        <section className="rounded-lg border border-border bg-white p-6 shadow-panel">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold">Latest verification result</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Shadow-tested on your traffic — not generic benchmarks.</p>
-            </div>
-            <ShieldCheck className="h-6 w-6 text-primary" />
-          </div>
+        <Panel title="Latest verification" description="Shadow-tested on your traffic — not generic benchmarks.">
           {latestVerification && latestVerification.experimentStatus === "PASSED" ? (
-            <div className="mt-5 rounded-md border border-border bg-muted/40 p-5">
+            <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold">{latestVerification.taskName}</div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <span>{latestVerification.currentModel}</span>
-                    <ArrowRight className="h-4 w-4" />
-                    <span>{latestVerification.candidateModel}</span>
+                  <p className="text-sm font-semibold text-foreground">{latestVerification.taskName}</p>
+                  <div className="mt-3">
+                    <ModelSwitchPill
+                      from={latestVerification.currentModel}
+                      to={latestVerification.candidateModel}
+                    />
                   </div>
                 </div>
-                <SwitchStatusBadge status={latestVerification.switchStatus} />
+                <SwitchStatusBadge status={latestVerification.switchStatus} size="lg" />
               </div>
-              <p className="mt-4 text-sm">{latestVerification.summarySentence}</p>
-              <div className="mt-4 flex flex-wrap gap-4 text-sm">
+              <p className="text-sm leading-relaxed text-muted-foreground">{latestVerification.summarySentence}</p>
+              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
                 <span>
-                  Pass rate:{" "}
-                  <strong>
-                    {latestVerification.passRate != null ? `${(latestVerification.passRate * 100).toFixed(1)}%` : "—"}
+                  Pass rate{" "}
+                  <strong className="text-foreground">
+                    {latestVerification.passRate != null
+                      ? `${(latestVerification.passRate * 100).toFixed(1)}%`
+                      : "—"}
                   </strong>
                 </span>
                 <span>
-                  Sample: <strong>{latestVerification.totalReplayRuns} replays</strong>
+                  Sample <strong className="text-foreground">{latestVerification.totalReplayRuns} replays</strong>
                 </span>
                 <span>
-                  Confidence: <strong>{latestVerification.sampleConfidence.label}</strong>
+                  <strong className="text-foreground">{latestVerification.sampleConfidence.label}</strong>
                 </span>
-                {latestVerification.estimatedSavingsPercent != null ? (
-                  <span>
-                    Est. savings: <strong>{latestVerification.estimatedSavingsPercent}%</strong>
-                  </span>
-                ) : null}
               </div>
               <Link
                 href={`/verification?task=${encodeURIComponent(latestVerification.taskName)}`}
-                className="mt-4 inline-flex text-sm font-medium text-primary"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
               >
                 View replay evidence
+                <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
           ) : primaryRecommendation ? (
-            <div className="mt-5 rounded-md border border-border bg-muted/40 p-5">
+            <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <div className="text-sm font-semibold">{primaryRecommendation.taskName}</div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <span>{primaryRecommendation.currentModel}</span>
-                    <ArrowRight className="h-4 w-4" />
-                    <span>{primaryRecommendation.recommendedModel}</span>
+                  <p className="text-sm font-semibold text-foreground">{primaryRecommendation.taskName}</p>
+                  <div className="mt-3">
+                    <ModelSwitchPill
+                      from={primaryRecommendation.currentModel}
+                      to={primaryRecommendation.recommendedModel}
+                    />
                   </div>
                 </div>
-                <SwitchStatusBadge status={primaryRecommendation.switchStatus} />
+                <SwitchStatusBadge status={primaryRecommendation.switchStatus} size="lg" />
               </div>
-              <p className="mt-4 text-sm">{primaryRecommendation.rationale[0]}</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">{primaryRecommendation.rationale[0]}</p>
               <Link
                 href={`/verification?task=${encodeURIComponent(primaryRecommendation.taskName)}`}
-                className="mt-4 inline-flex text-sm font-medium text-primary"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
               >
                 View verification details
+                <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
           ) : (
-            <div className="mt-5 rounded-md border border-dashed border-border p-5 text-sm text-muted-foreground">
-              <p>{workspace.recommendationInsights?.message ?? "Need more traces before verification."}</p>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                {workspace.recommendationInsights?.message ?? "Need more traces before verification."}
+              </p>
               {(workspace.recommendationInsights?.pendingExperiments ?? 0) > 0 ? (
-                <p className="mt-2">Shadow verification is running on sampled production prompts.</p>
+                <p className="text-sm text-muted-foreground">Shadow verification is running on sampled prompts.</p>
               ) : null}
-              <div className="mt-4 flex flex-wrap gap-3">
-                <Link href="/settings" className="font-medium text-primary">
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <Link href="/settings" className="font-semibold text-primary hover:underline">
                   Load demo traffic
                 </Link>
                 <span className="text-muted-foreground">or</span>
                 <button
                   type="button"
-                  className="font-medium text-primary disabled:opacity-50"
+                  className="font-semibold text-primary hover:underline disabled:opacity-50"
                   disabled={workspace.verificationBusy}
                   onClick={() => void workspace.runVerification()}
                 >
@@ -221,16 +193,19 @@ export default function OverviewPage() {
               </div>
             </div>
           )}
-        </section>
+        </Panel>
 
         {(workspace.migrations.length ?? 0) > 0 ? (
-          <section className="rounded-lg border border-amber-200 bg-amber-50/70 p-5">
-            <h2 className="text-sm font-semibold text-amber-950">Deprecated model alert</h2>
-            <p className="mt-1 text-sm text-amber-900/90">
-              {workspace.migrations[0].displayName} is receiving traffic ({workspace.migrations[0].totalTraceCount} traces).
-              Plan a verified replacement before retirement.
-            </p>
-          </section>
+          <div className="flex gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/90 px-5 py-4">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+            <div>
+              <h2 className="text-sm font-semibold text-amber-950">Deprecated model alert</h2>
+              <p className="mt-1 text-sm text-amber-900/85">
+                {workspace.migrations[0].displayName} is receiving traffic ({workspace.migrations[0].totalTraceCount}{" "}
+                traces). Plan a verified replacement before retirement.
+              </p>
+            </div>
+          </div>
         ) : null}
       </div>
     </AppShell>

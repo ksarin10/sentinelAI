@@ -1,5 +1,5 @@
-import { ArrowRight } from "lucide-react";
 import type { VerificationDetailRecord, VerificationRecord } from "../lib/types";
+import { ModelSwitchPill } from "./model-switch-pill";
 import { SwitchStatusBadge } from "./switch-status-badge";
 
 type Props = {
@@ -16,65 +16,69 @@ function formatUsd(value: number | null | undefined) {
 }
 
 export function VerificationSummaryCard({ verification, detail, replaySampleSize }: Props) {
-  const totalRuns = verification.totalReplayRuns || verification.passedRuns + verification.borderlineRuns + verification.failedRuns;
+  const totalRuns =
+    verification.totalReplayRuns || verification.passedRuns + verification.borderlineRuns + verification.failedRuns;
   const sampleSize = replaySampleSize ?? totalRuns;
   const avgQuality = detail?.averageQualityScore ?? verification.averageQualityScore;
 
   return (
-    <section className="rounded-lg border border-[#9ad7cf] bg-gradient-to-br from-[#e8f7f4] to-white p-6 shadow-panel">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#0d6b5c]">Verified model switch</p>
-          <h2 className="mt-1 text-xl font-semibold text-[#0a3d34]">{verification.taskName}</h2>
+    <section className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/[0.08] via-card to-card shadow-lift">
+      <div className="border-b border-primary/10 px-6 py-5 sm:px-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-accent">Verified model switch</p>
+            <h2 className="font-display mt-2 text-2xl tracking-tight text-foreground">{verification.taskName}</h2>
+          </div>
+          <SwitchStatusBadge status={verification.switchStatus} size="lg" />
         </div>
-        <SwitchStatusBadge status={verification.switchStatus} />
+        <div className="mt-4">
+          <ModelSwitchPill from={verification.currentModel} to={verification.candidateModel} />
+        </div>
+        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-muted-foreground">{verification.summarySentence}</p>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-[#0d6b5c]/90">
-        <span className="font-medium">{verification.currentModel}</span>
-        <ArrowRight className="h-4 w-4" />
-        <span className="font-medium">{verification.candidateModel}</span>
-      </div>
-
-      <p className="mt-4 text-sm leading-relaxed text-[#0a3d34]/85">{verification.summarySentence}</p>
-
-      <dl className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-md bg-white/70 p-3 ring-1 ring-[#9ad7cf]/60">
-          <dt className="text-xs uppercase tracking-wide text-muted-foreground">Production prompts replayed</dt>
-          <dd className="mt-1 text-lg font-semibold">{sampleSize || "—"}</dd>
-        </div>
-        <div className="rounded-md bg-white/70 p-3 ring-1 ring-[#9ad7cf]/60">
-          <dt className="text-xs uppercase tracking-wide text-muted-foreground">Pass / borderline / fail</dt>
-          <dd className="mt-1 text-lg font-semibold">
-            {verification.passedRuns} / {verification.borderlineRuns} / {verification.failedRuns}
-          </dd>
-        </div>
-        <div className="rounded-md bg-white/70 p-3 ring-1 ring-[#9ad7cf]/60">
-          <dt className="text-xs uppercase tracking-wide text-muted-foreground">Avg quality score</dt>
-          <dd className="mt-1 text-lg font-semibold">{avgQuality != null ? avgQuality.toFixed(2) : "—"}</dd>
-        </div>
-        <div className="rounded-md bg-white/70 p-3 ring-1 ring-[#9ad7cf]/60">
-          <dt className="text-xs uppercase tracking-wide text-muted-foreground">Est. monthly savings</dt>
-          <dd className="mt-1 text-lg font-semibold text-primary">
-            {formatUsd(verification.estimatedMonthlySavingsUsd)}
-            {verification.estimatedSavingsPercent != null ? (
-              <span className="ml-1 text-sm font-normal text-muted-foreground">({verification.estimatedSavingsPercent}%)</span>
-            ) : null}
-          </dd>
-        </div>
+      <dl className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: "Prompts replayed", value: sampleSize || "—" },
+          {
+            label: "Pass / borderline / fail",
+            value: `${verification.passedRuns} / ${verification.borderlineRuns} / ${verification.failedRuns}`
+          },
+          { label: "Avg quality", value: avgQuality != null ? avgQuality.toFixed(2) : "—" },
+          {
+            label: "Est. monthly savings",
+            value: (
+              <>
+                {formatUsd(verification.estimatedMonthlySavingsUsd)}
+                {verification.estimatedSavingsPercent != null ? (
+                  <span className="ml-1 text-sm font-normal text-muted-foreground">
+                    ({verification.estimatedSavingsPercent}%)
+                  </span>
+                ) : null}
+              </>
+            )
+          }
+        ].map((item) => (
+          <div key={item.label} className="bg-card px-5 py-4 sm:px-6">
+            <dt className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{item.label}</dt>
+            <dd className="mt-1.5 text-lg font-semibold tabular-nums text-foreground">{item.value}</dd>
+          </div>
+        ))}
       </dl>
 
-      <div className="mt-4 flex flex-wrap gap-4 rounded-md border border-[#9ad7cf]/50 bg-white/60 px-4 py-3 text-sm">
+      <div className="flex flex-wrap gap-x-6 gap-y-2 border-t border-border px-6 py-4 text-sm sm:px-8">
         <span>
-          Pass rate:{" "}
-          <strong>{verification.passRate != null ? `${(verification.passRate * 100).toFixed(1)}%` : "—"}</strong>
+          Pass rate{" "}
+          <strong className="text-foreground">
+            {verification.passRate != null ? `${(verification.passRate * 100).toFixed(1)}%` : "—"}
+          </strong>
         </span>
         <span>
-          Sample size: <strong>{sampleSize} traces</strong>
+          Sample <strong className="text-foreground">{sampleSize} traces</strong>
         </span>
-        <span>
-          Confidence: <strong>{verification.sampleConfidence.label}</strong>
-          <span className="text-muted-foreground"> — {verification.sampleConfidence.detail}</span>
+        <span className="text-muted-foreground">
+          <strong className="text-foreground">{verification.sampleConfidence.label}</strong> —{" "}
+          {verification.sampleConfidence.detail}
         </span>
       </div>
     </section>
