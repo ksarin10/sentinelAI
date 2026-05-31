@@ -1,17 +1,23 @@
 # SentinelAI
 
-**Verified model switching for small AI teams** — not another generic observability dashboard.
+Verified model switching for LLM applications. SentinelAI ingests production traces, identifies same-provider downgrade candidates per task, replays sampled prompts against the candidate model, and returns a switch recommendation with estimated savings and per-replay evidence.
 
-SentinelAI ingests production LLM traces, finds a cheaper **same-provider** model for each task, replays real prompts in the background, and returns a decisive recommendation: **Safe to switch**, **Needs review**, or **Do not switch** — with estimated savings and per-replay evidence.
+Switch outcomes:
 
-## Why this is not just observability
+- **Safe to switch** — pass rate ≥ 90% and zero critical failures
+- **Needs review** — pass rate ≥ 75%
+- **Do not switch** — pass rate &lt; 75%
 
-| Generic observability | SentinelAI |
-| --- | --- |
-| Latency/token charts | Shadow replay on **your** prompts |
-| “Try a smaller model” guesses | Pass / borderline / fail with reasons |
-| Benchmarks | Quality vs your task threshold |
-| Open-ended analytics | One golden path: verify → switch → save |
+Pass rate is `passed / (passed + borderline + failed)`. Borderline replays count against the rate but are not classified as failures.
+
+## Capabilities
+
+- Trace ingestion via REST API or TypeScript SDK
+- Task-level cost and quality analytics
+- Same-provider model recommendations from catalog pricing
+- Background shadow verification (simulate or live provider replay)
+- Per-replay verdicts: pass, borderline, or fail, with reasons and risk categories
+- Dashboard for overview, tasks, verification evidence, traces, and project settings
 
 ## Architecture
 
@@ -39,35 +45,28 @@ flowchart LR
   W --- SHARED
 ```
 
-- **`apps/api`**: Auth, projects, trace ingestion, analytics, recommendations, verifications API.
-- **`apps/worker`**: BullMQ jobs — evaluations and shadow experiments (simulate or live replay).
-- **`apps/web`**: Five-page product shell — Overview, Tasks, Verification, Traces, Settings.
-- **`packages/shared`**: Shared contracts, replay verdicts, switch status rules, shadow economics caps.
-- **`packages/sdk`**: Send traces from your app.
-- **`prisma/`**: PostgreSQL schema and demo seed.
+| Package | Role |
+| --- | --- |
+| `apps/api` | Auth, projects, ingestion, analytics, recommendations, verifications |
+| `apps/worker` | BullMQ evaluations and shadow experiments |
+| `apps/web` | Dashboard (Overview, Tasks, Verification, Traces, Settings) |
+| `packages/shared` | Replay verdicts, switch rules, shadow economics |
+| `packages/sdk` | Client library for trace ingestion |
+| `prisma/` | Schema and migrations |
 
-## Core flow (golden path)
+## Verification workflow
 
-1. **Ingest** production traces (SDK or demo seed in Settings).
-2. **Tasks** — SentinelAI groups traffic by task name and spots expensive models.
-3. **Run verification** — worker samples up to 8 prompts, replays against the candidate model, scores semantic quality + hallucination risk.
-4. **Verification page** — summary card (pass/borderline/fail, savings, confidence) + replay evidence table.
-5. **Switch decision** — shared rules everywhere:
-   - **Safe to switch**: pass rate ≥ 90% and zero critical failures
-   - **Needs review**: pass rate ≥ 75%
-   - **Do not switch**: pass rate &lt; 75%
-
-Pass rate = `passed / (passed + borderline + failed)` — borderline rows count against the rate but are not failures.
+1. Ingest production traces for a project.
+2. Configure task profiles (quality threshold, optimization goal) in Settings.
+3. Request recommendations; the API queues shadow experiments for verifiable same-provider candidates.
+4. The worker samples up to `SHADOW_MAX_REPLAYS_PER_EXPERIMENT` traces (default 8), replays prompts, and scores responses.
+5. Review results on the Verification page: aggregate summary, savings estimate, sample confidence, and replay evidence rows.
 
 ## Tech stack
 
-- TypeScript monorepo (npm workspaces)
-- NestJS, Next.js, Tailwind
-- PostgreSQL + Prisma
-- Redis + BullMQ
-- Docker Compose for local full stack
+TypeScript monorepo (npm workspaces): NestJS, Next.js, PostgreSQL, Prisma, Redis, BullMQ, Docker Compose.
 
-## Local setup
+## Getting started
 
 ```bash
 npm install
@@ -80,68 +79,65 @@ npm run dev:worker
 npm run dev:web
 ```
 
-Web: `http://localhost:3000` · API: `http://localhost:4000/api`
+- Web: `http://localhost:3000`
+- API: `http://localhost:4000/api`
 
 Copy `NEXT_PUBLIC_*` from `.env` into `apps/web/.env.local` when running the web app outside Docker.
 
-### Docker (all services)
+### Docker
 
 ```bash
 docker compose up -d --build api worker web
 ```
 
-After changing `.env`, recreate containers (rebuild **web** if `NEXT_PUBLIC_*` changed).
+Recreate containers after changing `.env` (rebuild `web` when `NEXT_PUBLIC_*` changes).
 
-### Key environment variables
+### Environment variables
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL |
-| `REDIS_URL` | BullMQ |
-| `JWT_SECRET` | Auth + credential encryption fallback |
-| `SHADOW_REPLAY_MODE` | `simulate` (dev, uses stored scores) or `api` (live replay) |
-| `SHADOW_MAX_REPLAYS_PER_EXPERIMENT` | Default `8` samples per verification |
-| `OPENAI_API_KEY` | Optional in Settings for live replay / judge |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis for BullMQ |
+| `JWT_SECRET` | JWT signing; fallback for provider credential encryption |
+| `SHADOW_REPLAY_MODE` | `simulate` (reuse stored evaluation scores) or `api` (live replay) |
+| `SHADOW_MAX_REPLAYS_PER_EXPERIMENT` | Max replays per experiment (default `8`) |
+| `SHADOW_MIN_SAVINGS_USD` | Minimum estimated savings to queue shadow work |
+| `OPENAI_API_KEY` | Live replay and optional LLM judge (Settings or env) |
+| `PROVIDER_CREDENTIALS_SECRET` | Encrypts per-project provider keys (defaults to `JWT_SECRET`) |
 
-## Demo walkthrough (resume-friendly)
+## Demo data
 
-1. Sign in, create or select a project.
-2. **Settings → Load demo traffic** — renames project to **SupportBot Demo**, seeds 14 `support.answer` traces on `gpt-4.1` (one row at ~0.78 semantic for a borderline replay).
-3. **Overview → Run verification** — same-provider candidate `gpt-4.1-mini`, ~8 replays, typically **7 pass / 1 borderline** → **Needs review** at 87.5% with strong savings estimate.
-4. Open **Verification** — read the “Verified model switch” summary and expand replay evidence (prompt + response previews, reasons, risk categories).
-5. Optional: add OpenAI key in Settings and set `SHADOW_REPLAY_MODE=api` for live replay.
+In Settings, **Load demo traffic** seeds a project with `support.answer` traces on `gpt-4.1` and a task profile for cost reduction. Run verification from Overview to shadow-test `gpt-4.1-mini`.
 
 ```bash
+PROJECT_ID=<project-id> npm run demo:seed
 npm run smoke
-./scripts/e2e-recommendations.sh   # with API + worker up
+./scripts/e2e-recommendations.sh   # requires API and worker
 ```
 
-## Product pages
+Use `SHADOW_REPLAY_MODE=simulate` for local verification without provider API keys.
 
-| Route | Purpose |
+## Application routes
+
+| Route | Description |
 | --- | --- |
-| `/dashboard` | “Can I safely switch?” — savings, spend, latest verification, CTA |
-| `/tasks` | Per-task models and verification status |
-| `/verification` | Summary + replay evidence |
-| `/traces` | Prompt/response explorer |
-| `/settings` | OpenAI key, thresholds, demo seed, ingestion keys |
+| `/dashboard` | Spend, savings opportunity, latest verification, run verification |
+| `/tasks` | Per-task models, candidates, verification status |
+| `/verification` | Verification summary and replay evidence |
+| `/traces` | Trace list and detail |
+| `/settings` | OpenAI credentials, task thresholds, ingestion keys, demo seed |
 
-Legacy routes redirect: `/projects` → Settings, `/catalog` → Overview.
+Redirects: `/projects` → `/settings`, `/catalog` → `/dashboard`.
 
-## Intentionally deferred
-
-- Billing, teams, RBAC
-- Multi-provider marketplace UI
-- Broad “AI analytics” / signal-room style dashboards
-- Stripe, enterprise settings
-
-Cross-provider replay code remains for future use but is not surfaced in the main UI.
-
-## Commands
+## Development
 
 ```bash
 npm run build -w @sentinelai/shared
 npm run test
 npm run build --workspace=@sentinelai/web
-PROJECT_ID=<your-project-id> npm run demo:seed
+npm run build --workspace=@sentinelai/api
 ```
+
+## Roadmap
+
+Not in the current release: billing, multi-tenant RBAC, multi-provider marketplace UI, and broad observability dashboards. Cross-provider shadow replay exists in the worker but is not exposed in the primary UI.
