@@ -1,4 +1,10 @@
 import { TaskRiskLevel } from "@prisma/client";
+import {
+  deriveSwitchRecommendationStatus,
+  passRate,
+  switchStatusLabel,
+  type SwitchRecommendationStatus
+} from "@sentinelai/shared";
 import { RecommendationCandidate } from "../recommendations/recommendation-candidates";
 import { ModelCatalogDto } from "../model-catalog/model-catalog.dto";
 
@@ -22,7 +28,11 @@ export type ModelRecommendation = {
   currentModel: string;
   recommendedProvider: string;
   recommendedModel: string;
+  recommendationScope: "SAME_PROVIDER" | "CROSS_PROVIDER";
   recommendationType: "REDUCE_COST";
+  switchStatus: SwitchRecommendationStatus;
+  switchStatusLabel: string;
+  passRate: number | null;
   confidence: "LOW" | "MEDIUM" | "HIGH";
   estimatedSavingsUsd: number;
   estimatedSavingsPercent: number;
@@ -85,6 +95,11 @@ export function buildVerifiedRecommendations(
     }
 
     const savingsPercent = passed.estimatedSavingsPercent ?? candidate.estimatedSavingsPercent;
+    const switchStatus = deriveSwitchRecommendationStatus({
+      passedRuns: passed.passedRuns,
+      failedRuns: passed.failedRuns,
+      experimentStatus: "PASSED"
+    });
 
     return [
       {
@@ -93,15 +108,17 @@ export function buildVerifiedRecommendations(
         currentModel: candidate.currentModel,
         recommendedProvider: candidate.recommendedProvider,
         recommendedModel: candidate.recommendedModel,
+        recommendationScope: candidate.recommendationScope,
         recommendationType: "REDUCE_COST",
+        switchStatus,
+        switchStatusLabel: switchStatusLabel(switchStatus),
+        passRate: passRate(passed.passedRuns, passed.failedRuns),
         confidence: recommendationConfidence(passed.passedRuns, candidate.riskLevel),
         estimatedSavingsUsd: candidate.estimatedSavingsUsd,
         estimatedSavingsPercent: savingsPercent,
         rationale: [
           `${recommendedModel.displayName} was verified against recent ${candidate.taskName} traffic in the background.`,
-          candidate.recommendationScope === "CROSS_PROVIDER"
-            ? `Cross-provider switch (${candidate.recommendedProvider}) cleared shadow checks using your connected provider key.`
-            : `Same-provider downgrade cleared shadow checks on sampled calls.`,
+          `Shadow-tested on your traffic before recommending this switch.`,
           `Shadow checks passed on ${passed.passedRuns} sampled calls while staying above your quality threshold.`,
           `Estimated savings remain about ${savingsPercent}% versus ${currentModel.displayName}.`
         ],

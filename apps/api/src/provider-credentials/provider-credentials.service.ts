@@ -22,8 +22,13 @@ export class ProviderCredentialsService {
   ) {}
 
   private encryptionSecret() {
-    const secret =
-      this.config.get<string>("PROVIDER_CREDENTIALS_SECRET") ?? this.config.get<string>("JWT_SECRET");
+    const candidates = [
+      process.env.PROVIDER_CREDENTIALS_SECRET,
+      process.env.JWT_SECRET,
+      this.config.get<string>("PROVIDER_CREDENTIALS_SECRET"),
+      this.config.get<string>("JWT_SECRET")
+    ];
+    const secret = candidates.find((value) => typeof value === "string" && value.trim().length > 0);
     if (!secret) {
       throw new Error("PROVIDER_CREDENTIALS_SECRET or JWT_SECRET is required to store provider keys");
     }

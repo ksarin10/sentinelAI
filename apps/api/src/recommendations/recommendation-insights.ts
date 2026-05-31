@@ -6,6 +6,7 @@ import {
   RecommendationCandidate,
   TaskProfileForRecommendation
 } from "./recommendation-candidates";
+import { RecommendationSuggestion } from "./recommendation-verification";
 
 export type RecommendationEmptyReason =
   | "NO_TRACES"
@@ -16,7 +17,8 @@ export type RecommendationEmptyReason =
   | "NO_CHEAPER_CANDIDATE"
   | "EXPERIMENTS_RUNNING"
   | "EXPERIMENTS_FAILED"
-  | "AWAITING_VERIFICATION";
+  | "AWAITING_VERIFICATION"
+  | "SUGGESTIONS_NEED_KEYS";
 
 export type RecommendationInsights = {
   reason: RecommendationEmptyReason | null;
@@ -36,6 +38,7 @@ type InsightInput = {
   pendingExperiments: number;
   failedExperiments: number;
   latestFailedReason?: string | null;
+  suggestions?: RecommendationSuggestion[];
 };
 
 const defaultTaskProfile = (taskName: string): TaskProfileForRecommendation => ({
@@ -123,6 +126,15 @@ export function buildRecommendationInsights(
       ...base,
       reason: "EXPERIMENTS_FAILED",
       message: `Shadow verification failed. Check provider keys, quality thresholds, and recent trace health.${detail}`
+    };
+  }
+
+  if ((input.suggestions?.length ?? 0) > 0 && input.candidates.length === 0) {
+    return {
+      ...base,
+      reason: "SUGGESTIONS_NEED_KEYS",
+      message:
+        "Cross-provider savings are available but need provider API keys (and SHADOW_REPLAY_MODE=api) before we run paid verification on your account."
     };
   }
 

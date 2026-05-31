@@ -15,6 +15,7 @@ import { RecommendationsModule } from "./recommendations/recommendations.module"
 import { TaskProfilesModule } from "./task-profiles/task-profiles.module";
 import { TracesModule } from "./traces/traces.module";
 import { UsersModule } from "./users/users.module";
+import { VerificationsModule } from "./verifications/verifications.module";
 
 @Module({
   imports: [
@@ -40,7 +41,8 @@ import { UsersModule } from "./users/users.module";
     ModelMigrationsModule,
     AnalyticsModule,
     RecommendationsModule,
-    TaskProfilesModule
+    TaskProfilesModule,
+    VerificationsModule
   ]
 })
 export class AppModule {}

@@ -1,6 +1,7 @@
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
+import { readShadowEconomicsConfig, type ShadowEconomicsConfig } from "@sentinelai/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { RecommendationCandidate } from "../recommendations/recommendation-candidates";
 import { PassedShadowExperiment } from "./shadow-experiment-engine";
@@ -26,7 +27,25 @@ export class ShadowExperimentsService {
     @InjectQueue("shadow-experiments") private readonly shadowQueue: Queue
   ) {}
 
-  async syncCandidates(projectId: string, candidates: RecommendationCandidate[]) {
+  private startOfUtcDay() {
+    const start = new Date();
+    start.setUTCHours(0, 0, 0, 0);
+    return start;
+  }
+
+  async countExperimentsCreatedToday(projectId: string) {
+    return this.prisma.shadowExperiment.count({
+      where: { projectId, createdAt: { gte: this.startOfUtcDay() } }
+    });
+  }
+
+  async syncCandidates(
+    projectId: string,
+    candidates: RecommendationCandidate[],
+    economics: ShadowEconomicsConfig = readShadowEconomicsConfig(process.env)
+  ) {
+    let experimentsCreatedToday = await this.countExperimentsCreatedToday(projectId);
+
     for (const candidate of candidates) {
       const experiment = await this.prisma.shadowExperiment.upsert({
         where: {
@@ -77,7 +96,15 @@ export class ShadowExperimentsService {
         continue;
       }
 
+      const isNewQueue = experiment.status === "QUEUED" && !shouldRetryFailed;
+      if (isNewQueue && experimentsCreatedToday >= economics.maxExperimentsPerProjectPerDay) {
+        continue;
+      }
+
       await queueShadowExperiment(this.shadowQueue, experiment.id);
+      if (isNewQueue) {
+        experimentsCreatedToday += 1;
+      }
     }
   }
 

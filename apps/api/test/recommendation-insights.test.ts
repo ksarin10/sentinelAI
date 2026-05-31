@@ -53,7 +53,8 @@ const emptyInsightInput = {
   }>,
   configuredProviders: new Set<string>(),
   pendingExperiments: 0,
-  failedExperiments: 0
+  failedExperiments: 0,
+  suggestions: []
 };
 
 assert.equal(buildRecommendationInsights([], emptyInsightInput).reason, "NO_TRACES");
@@ -82,7 +83,8 @@ const withCandidate = {
   ],
   configuredProviders: new Set(["openai"]),
   pendingExperiments: 0,
-  failedExperiments: 0
+  failedExperiments: 0,
+  suggestions: []
 };
 
 assert.equal(
@@ -112,6 +114,10 @@ const recommendation = {
   currentModel: "gpt-4.1",
   recommendedProvider: "openai",
   recommendedModel: "gpt-4.1-mini",
+  recommendationScope: "SAME_PROVIDER",
+  switchStatus: "SAFE_TO_SWITCH",
+  switchStatusLabel: "Safe to switch",
+  passRate: 1,
   recommendationType: "REDUCE_COST",
   confidence: "MEDIUM",
   estimatedSavingsUsd: 0.4,

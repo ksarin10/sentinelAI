@@ -97,7 +97,8 @@ const verifiedAfterExperiment = buildVerifiedRecommendations(
 
 assert.equal(verifiedAfterExperiment.length, 1);
 assert.equal(verifiedAfterExperiment[0].signals.verifiedRuns, 8);
-assert.match(verifiedAfterExperiment[0].rationale[0], /verified against recent support.answer traffic/i);
+assert.equal(verifiedAfterExperiment[0].switchStatus, "NEEDS_REVIEW");
+assert.match(verifiedAfterExperiment[0].rationale[0], /GPT-4.1 mini was verified/i);
 
 const weakQualityCandidates = findRecommendationCandidates(
   [{ ...healthyTask, averageSemanticSimilarity: 0.6 }],

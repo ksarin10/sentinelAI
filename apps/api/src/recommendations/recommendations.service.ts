@@ -4,6 +4,11 @@ import { ModelCatalogService } from "../model-catalog/model-catalog.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { findRecommendationCandidates } from "./recommendation-candidates";
 import { buildRecommendationInsights } from "./recommendation-insights";
+import {
+  buildProviderCapabilities,
+  partitionCandidatesForShadow,
+  readEconomicsForApi
+} from "./recommendation-verification";
 import { buildVerifiedRecommendations } from "../shadow-experiments/shadow-experiment-engine";
 import { ProviderCredentialsService } from "../provider-credentials/provider-credentials.service";
 import { ShadowExperimentsService } from "../shadow-experiments/shadow-experiments.service";
@@ -38,27 +43,45 @@ export class RecommendationsService {
     const unfilteredCandidates = findRecommendationCandidates(taskModels, catalog, profiles, configuredProviders, {
       applyMinSavingsFilter: false
     });
-    const candidates = findRecommendationCandidates(taskModels, catalog, profiles, configuredProviders);
-    await this.shadowExperiments.syncCandidates(projectId, candidates);
+    const candidates = findRecommendationCandidates(taskModels, catalog, profiles, configuredProviders).filter(
+      (candidate) => candidate.recommendedProvider === candidate.currentProvider
+    );
+    const economics = readEconomicsForApi();
+    const { verifiable, suggestions } = partitionCandidatesForShadow(candidates, configuredProviders);
+    const sameProviderSuggestions = suggestions.filter(
+      (suggestion) => suggestion.recommendedProvider === suggestion.currentProvider
+    );
+    const providerCapabilities = buildProviderCapabilities(configuredProviders);
+
+    await this.shadowExperiments.syncCandidates(projectId, verifiable, economics);
     const [passedExperiments, experimentCounts, latestFailedReason] = await Promise.all([
       this.shadowExperiments.listPassed(projectId),
       this.shadowExperiments.experimentCounts(projectId),
       this.shadowExperiments.latestFailedReason(projectId)
     ]);
 
-    const recommendations = buildVerifiedRecommendations(candidates, passedExperiments, catalog);
+    const recommendations = buildVerifiedRecommendations(verifiable, passedExperiments, catalog);
     const insights = buildRecommendationInsights(recommendations, {
       traceCount: summary.traceCount,
       analytics: taskModels,
-      candidates,
+      candidates: verifiable,
       unfilteredCandidates,
       profiles,
       configuredProviders,
       pendingExperiments: experimentCounts.pendingExperiments,
       failedExperiments: experimentCounts.failedExperiments,
-      latestFailedReason
+      latestFailedReason,
+      suggestions: sameProviderSuggestions
     });
 
-    return { recommendations, insights };
+    return {
+      recommendations,
+      suggestions: sameProviderSuggestions,
+      providerCapabilities: buildProviderCapabilities(configuredProviders).filter(
+        (capability) => capability.provider === "openai"
+      ),
+      economics,
+      insights
+    };
   }
 }
