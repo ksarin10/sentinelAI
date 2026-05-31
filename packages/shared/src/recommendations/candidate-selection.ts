@@ -56,6 +56,41 @@ function blendedTokenPrice(model: Pick<CatalogModelForRecommendation, "inputToke
   return (model.inputTokenPricePer1M + model.outputTokenPricePer1M) / 2;
 }
 
+function modelFamilyKey(provider: string, model: string) {
+  const normalized = model.toLowerCase();
+  if (provider === "openai") {
+    if (normalized.startsWith("gpt-4.1")) return "gpt-4.1";
+    if (normalized.startsWith("gpt-4o")) return "gpt-4o";
+    if (normalized.startsWith("gpt-3.5")) return "gpt-3.5";
+    if (normalized.startsWith("o1")) return "o1";
+    if (normalized.startsWith("o3")) return "o3";
+  }
+  if (provider === "anthropic") {
+    if (normalized.includes("haiku")) return "haiku";
+    if (normalized.includes("sonnet")) return "sonnet";
+    if (normalized.includes("opus")) return "opus";
+  }
+  if (provider === "google") {
+    if (normalized.includes("flash-lite")) return "flash-lite";
+    if (normalized.includes("flash")) return "flash";
+    if (normalized.includes("pro")) return "pro";
+  }
+  return normalized.split("-").slice(0, 2).join("-");
+}
+
+function pickPreferredOption(
+  options: Array<{ candidate: CatalogModelForRecommendation; price: number }>,
+  current: CatalogModelForRecommendation
+) {
+  if (options.length === 0) {
+    return undefined;
+  }
+
+  const family = modelFamilyKey(current.provider, current.model);
+  const inFamily = options.filter((entry) => modelFamilyKey(entry.candidate.provider, entry.candidate.model) === family);
+  return inFamily[0] ?? options[0];
+}
+
 function isChatCompletionModel(candidate: CatalogModelForRecommendation) {
   if (candidate.outputTokenPricePer1M <= 0) {
     return false;
@@ -98,7 +133,7 @@ export function selectRecommendationCandidate(
   const sameProviderOptions = cheaperCandidates(catalog, currentModel, currentPrice, required, configuredProviders, true);
   const crossProviderOptions = cheaperCandidates(catalog, currentModel, currentPrice, required, configuredProviders, false);
 
-  const bestSame = sameProviderOptions[0];
+  const bestSame = pickPreferredOption(sameProviderOptions, currentModel);
   const bestCross = crossProviderOptions[0];
 
   const savingsFraction = (price: number) => 1 - price / currentPrice;
