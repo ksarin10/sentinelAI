@@ -219,7 +219,9 @@ model ShadowExperiment {
   sampleSize                    Int                    @default(10)
   qualityThreshold              Float                  @default(0.8)
   passedRuns                    Int                    @default(0)
+  borderlineRuns                Int                    @default(0)
   failedRuns                    Int                    @default(0)
+  criticalFailures              Int                    @default(0)
   averageCandidateSemantic      Float?
   averageCandidateHallucination Float?
   estimatedSavingsPercent       Float?

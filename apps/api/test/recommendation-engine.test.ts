@@ -85,7 +85,9 @@ const verifiedAfterExperiment = buildVerifiedRecommendations(
       candidateProvider: "openai",
       candidateModel: "gpt-4.1-mini",
       passedRuns: 8,
-      failedRuns: 1,
+      borderlineRuns: 0,
+      failedRuns: 0,
+      criticalFailures: 0,
       averageCandidateSemantic: 0.84,
       averageCandidateHallucination: 0.09,
       estimatedSavingsPercent: 80,
@@ -97,7 +99,7 @@ const verifiedAfterExperiment = buildVerifiedRecommendations(
 
 assert.equal(verifiedAfterExperiment.length, 1);
 assert.equal(verifiedAfterExperiment[0].signals.verifiedRuns, 8);
-assert.equal(verifiedAfterExperiment[0].switchStatus, "NEEDS_REVIEW");
+assert.equal(verifiedAfterExperiment[0].switchStatus, "SAFE_TO_SWITCH");
 assert.match(verifiedAfterExperiment[0].rationale[0], /GPT-4.1 mini was verified/i);
 
 const weakQualityCandidates = findRecommendationCandidates(

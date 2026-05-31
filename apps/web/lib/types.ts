@@ -147,6 +147,16 @@ export type RecommendationsResponse = {
   insights: RecommendationInsightsRecord;
 };
 
+export type ReplayVerdict = "pass" | "borderline" | "fail";
+
+export type ReplayRiskCategory =
+  | "none"
+  | "missing_detail"
+  | "incorrect_fact"
+  | "tone_regression"
+  | "safety_issue"
+  | "low_similarity";
+
 export type VerificationRecord = {
   id: string;
   taskName: string;
@@ -159,22 +169,39 @@ export type VerificationRecord = {
   switchStatusLabel: string;
   passRate: number | null;
   passedRuns: number;
+  borderlineRuns: number;
   failedRuns: number;
+  criticalFailures: number;
+  totalReplayRuns: number;
   averageQualityScore: number | null;
   averageHallucinationRisk: number | null;
   estimatedSavingsPercent: number | null;
+  estimatedMonthlySavingsUsd: number | null;
   qualityThreshold: number;
   reason: string | null;
   completedAt: string | null;
   updatedAt: string;
+  sampleConfidence: {
+    level: "high" | "moderate" | "limited";
+    label: string;
+    detail: string;
+  };
+  summarySentence: string;
 };
 
 export type VerificationDetailRecord = VerificationRecord & {
   runs: Array<{
     id: string;
     traceId: string;
+    promptPreview: string;
+    baselinePreview: string;
+    candidatePreview: string;
     semanticScore: number;
     hallucinationScore: number;
+    verdict: ReplayVerdict;
+    reason: string;
+    riskCategory: ReplayRiskCategory;
+    critical: boolean;
     passed: boolean;
     createdAt: string;
   }>;

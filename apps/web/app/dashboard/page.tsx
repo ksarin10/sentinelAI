@@ -16,10 +16,14 @@ export default function OverviewPage() {
   const taskSummaries = buildTaskSummaries(workspace.taskModels, workspace.recommendations, workspace.verifications);
   const topTask = topExpensiveTask(taskSummaries);
   const primaryRecommendation = workspace.recommendations[0] ?? null;
+  const latestVerification =
+    [...workspace.verifications].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
   const monthlyCost = estimatedMonthlyCost(workspace.summary.totalCostUsd, workspace.summary.traceCount);
-  const monthlySavings = primaryRecommendation
-    ? estimatedMonthlyCost(primaryRecommendation.estimatedSavingsUsd, workspace.summary.traceCount)
-    : 0;
+  const monthlySavings =
+    latestVerification?.estimatedMonthlySavingsUsd ??
+    (primaryRecommendation
+      ? estimatedMonthlyCost(primaryRecommendation.estimatedSavingsUsd, workspace.summary.traceCount)
+      : null);
 
   return (
     <AppShell>
@@ -30,8 +34,8 @@ export default function OverviewPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#d96b4a]">Verified model switching</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight">Can I safely switch models and save money?</h1>
               <p className="mt-3 text-sm text-muted-foreground">
-                SentinelAI replays your real prompts against a cheaper same-provider model, checks whether quality holds,
-                and shows estimated savings before you change production.
+                SentinelAI shadow-tests your real prompts against a cheaper same-provider model, scores quality on each
+                replay, and recommends Safe to switch, Needs review, or Do not switch before you change production.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -85,28 +89,43 @@ export default function OverviewPage() {
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Production traces</div>
-            <div className="mt-2 text-2xl font-semibold">{workspace.summary.traceCount.toLocaleString()}</div>
-          </div>
-          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current model spend</div>
-            <div className="mt-2 text-2xl font-semibold">${workspace.summary.totalCostUsd.toFixed(2)}</div>
-            <div className="mt-1 text-xs text-muted-foreground">~${monthlyCost.toFixed(0)}/mo at current volume</div>
-          </div>
-          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Top expensive task</div>
-            <div className="mt-2 text-lg font-semibold">{topTask?.taskName ?? "—"}</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {topTask ? `${topTask.model} · ${topTask.traceCount} traces` : "Need more traces before verification"}
-            </div>
-          </div>
-          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
             <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verified savings opportunity</div>
             <div className="mt-2 text-2xl font-semibold text-primary">
-              {primaryRecommendation ? `~$${monthlySavings.toFixed(0)}/mo` : "—"}
+              {monthlySavings != null && monthlySavings > 0 ? `~$${monthlySavings.toFixed(0)}/mo` : "—"}
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
-              {primaryRecommendation ? `${primaryRecommendation.estimatedSavingsPercent}% on ${primaryRecommendation.taskName}` : "Run verification after ingesting traces"}
+              {primaryRecommendation
+                ? `${primaryRecommendation.estimatedSavingsPercent}% on ${primaryRecommendation.taskName}`
+                : "Run verification after ingesting traces"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current monthly model spend</div>
+            <div className="mt-2 text-2xl font-semibold">${monthlyCost.toFixed(0)}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              ${workspace.summary.totalCostUsd.toFixed(2)} observed · {workspace.summary.traceCount} traces
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Most expensive task</div>
+            <div className="mt-2 text-lg font-semibold">{topTask?.taskName ?? "—"}</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {topTask ? `${topTask.model} · ${topTask.traceCount} traces` : "Need more traces"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border bg-white p-4 shadow-panel">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest verification</div>
+            <div className="mt-2">
+              {latestVerification ? (
+                <SwitchStatusBadge status={latestVerification.switchStatus} />
+              ) : (
+                <span className="text-sm text-muted-foreground">Not run</span>
+              )}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {latestVerification?.passRate != null
+                ? `${(latestVerification.passRate * 100).toFixed(1)}% pass rate on ${latestVerification.totalReplayRuns} replays`
+                : "Shadow-test on your traffic"}
             </div>
           </div>
         </div>
@@ -119,7 +138,47 @@ export default function OverviewPage() {
             </div>
             <ShieldCheck className="h-6 w-6 text-primary" />
           </div>
-          {primaryRecommendation ? (
+          {latestVerification && latestVerification.experimentStatus === "PASSED" ? (
+            <div className="mt-5 rounded-md border border-border bg-muted/40 p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">{latestVerification.taskName}</div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <span>{latestVerification.currentModel}</span>
+                    <ArrowRight className="h-4 w-4" />
+                    <span>{latestVerification.candidateModel}</span>
+                  </div>
+                </div>
+                <SwitchStatusBadge status={latestVerification.switchStatus} />
+              </div>
+              <p className="mt-4 text-sm">{latestVerification.summarySentence}</p>
+              <div className="mt-4 flex flex-wrap gap-4 text-sm">
+                <span>
+                  Pass rate:{" "}
+                  <strong>
+                    {latestVerification.passRate != null ? `${(latestVerification.passRate * 100).toFixed(1)}%` : "—"}
+                  </strong>
+                </span>
+                <span>
+                  Sample: <strong>{latestVerification.totalReplayRuns} replays</strong>
+                </span>
+                <span>
+                  Confidence: <strong>{latestVerification.sampleConfidence.label}</strong>
+                </span>
+                {latestVerification.estimatedSavingsPercent != null ? (
+                  <span>
+                    Est. savings: <strong>{latestVerification.estimatedSavingsPercent}%</strong>
+                  </span>
+                ) : null}
+              </div>
+              <Link
+                href={`/verification?task=${encodeURIComponent(latestVerification.taskName)}`}
+                className="mt-4 inline-flex text-sm font-medium text-primary"
+              >
+                View replay evidence
+              </Link>
+            </div>
+          ) : primaryRecommendation ? (
             <div className="mt-5 rounded-md border border-border bg-muted/40 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -133,19 +192,10 @@ export default function OverviewPage() {
                 <SwitchStatusBadge status={primaryRecommendation.switchStatus} />
               </div>
               <p className="mt-4 text-sm">{primaryRecommendation.rationale[0]}</p>
-              <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                <span>
-                  Pass rate:{" "}
-                  <strong>{primaryRecommendation.passRate != null ? `${Math.round(primaryRecommendation.passRate * 100)}%` : "—"}</strong>
-                </span>
-                <span>
-                  Est. savings: <strong>{primaryRecommendation.estimatedSavingsPercent}%</strong>
-                </span>
-                <span>
-                  Sampled replays: <strong>{primaryRecommendation.signals.verifiedRuns}</strong>
-                </span>
-              </div>
-              <Link href={`/verification?task=${encodeURIComponent(primaryRecommendation.taskName)}`} className="mt-4 inline-flex text-sm font-medium text-primary">
+              <Link
+                href={`/verification?task=${encodeURIComponent(primaryRecommendation.taskName)}`}
+                className="mt-4 inline-flex text-sm font-medium text-primary"
+              >
                 View verification details
               </Link>
             </div>

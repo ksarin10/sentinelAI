@@ -1,57 +1,73 @@
 # SentinelAI
 
-Production-style AI observability and evaluation platform for monitoring LLM applications.
+**Verified model switching for small AI teams** — not another generic observability dashboard.
 
-SentinelAI captures model traces, tracks latency and token spend, runs async evaluation pipelines, and provides real-time analytics dashboards for AI systems.
-A trace represents a single LLM interaction, including prompts, responses, latency, token usage, and evaluation metadata.
+SentinelAI ingests production LLM traces, finds a cheaper **same-provider** model for each task, replays real prompts in the background, and returns a decisive recommendation: **Safe to switch**, **Needs review**, or **Do not switch** — with estimated savings and per-replay evidence.
 
-## Key Features
+## Why this is not just observability
 
-- Real-time LLM trace ingestion
-- Async evaluation pipelines with BullMQ workers
-- Latency, token, and cost analytics
-- Trace explorer for prompt/response inspection
-- Modular NestJS backend architecture
-- TypeScript SDK for external integrations
-- Dockerized local development environment
-
-## Why SentinelAI?
-
-Modern AI systems are probabilistic and difficult to debug. SentinelAI provides observability tooling for monitoring LLM applications, evaluating response quality, and analyzing production behavior across prompts, models, and deployments.
-
-## Technical Highlights
-
-- Modular monorepo architecture
-- Async job processing with BullMQ + Redis
-- RESTful ingestion APIs
-- PostgreSQL + Prisma data modeling
-- Shared TypeScript contracts across services
-- Dockerized multi-service development workflow
-- Real-time analytics dashboard with Recharts
+| Generic observability | SentinelAI |
+| --- | --- |
+| Latency/token charts | Shadow replay on **your** prompts |
+| “Try a smaller model” guesses | Pass / borderline / fail with reasons |
+| Benchmarks | Quality vs your task threshold |
+| Open-ended analytics | One golden path: verify → switch → save |
 
 ## Architecture
 
-- `apps/api`: NestJS REST API with modular auth, projects, ingestion, traces, analytics, and evaluations.
-- `apps/web`: Next.js dashboard with TailwindCSS, shadcn-style primitives, lucide icons, and Recharts.
-- `apps/worker`: BullMQ worker for async evaluation jobs.
-- `packages/shared`: Shared TypeScript contracts.
-- `packages/sdk`: TypeScript SDK for sending traces.
-- `prisma/schema.prisma`: PostgreSQL database schema.
+```mermaid
+flowchart LR
+  subgraph ingest [Ingest]
+    SDK[TypeScript SDK / API key]
+    API[apps/api NestJS]
+    PG[(PostgreSQL)]
+    SDK --> API --> PG
+  end
+  subgraph verify [Verify]
+    W[apps/worker BullMQ]
+    R[Shadow replay OpenAI]
+    API --> W
+    W --> R
+    W --> PG
+  end
+  subgraph ui [Dashboard]
+    WEB[apps/web Next.js]
+    WEB --> API
+  end
+  SHARED[packages/shared verdict + economics]
+  API --- SHARED
+  W --- SHARED
+```
 
-## Architecture Diagram
-<img width="1121" height="559" alt="image" src="https://github.com/user-attachments/assets/500c6b3a-70bc-4ac8-875d-d587efcad94b" />
+- **`apps/api`**: Auth, projects, trace ingestion, analytics, recommendations, verifications API.
+- **`apps/worker`**: BullMQ jobs — evaluations and shadow experiments (simulate or live replay).
+- **`apps/web`**: Five-page product shell — Overview, Tasks, Verification, Traces, Settings.
+- **`packages/shared`**: Shared contracts, replay verdicts, switch status rules, shadow economics caps.
+- **`packages/sdk`**: Send traces from your app.
+- **`prisma/`**: PostgreSQL schema and demo seed.
 
-## Tech Stack
+## Core flow (golden path)
 
+1. **Ingest** production traces (SDK or demo seed in Settings).
+2. **Tasks** — SentinelAI groups traffic by task name and spots expensive models.
+3. **Run verification** — worker samples up to 8 prompts, replays against the candidate model, scores semantic quality + hallucination risk.
+4. **Verification page** — summary card (pass/borderline/fail, savings, confidence) + replay evidence table.
+5. **Switch decision** — shared rules everywhere:
+   - **Safe to switch**: pass rate ≥ 90% and zero critical failures
+   - **Needs review**: pass rate ≥ 75%
+   - **Do not switch**: pass rate &lt; 75%
 
-- NestJS
-- Next.js
-- PostgreSQL
-- Redis/BullMQ
-- Docker
-- TypeScript
+Pass rate = `passed / (passed + borderline + failed)` — borderline rows count against the rate but are not failures.
 
-## Local Development
+## Tech stack
+
+- TypeScript monorepo (npm workspaces)
+- NestJS, Next.js, Tailwind
+- PostgreSQL + Prisma
+- Redis + BullMQ
+- Docker Compose for local full stack
+
+## Local setup
 
 ```bash
 npm install
@@ -64,68 +80,68 @@ npm run dev:worker
 npm run dev:web
 ```
 
-The web app runs on `http://localhost:3000`; the API runs on `http://localhost:4000/api`.
+Web: `http://localhost:3000` · API: `http://localhost:4000/api`
 
-### Environment variables
+Copy `NEXT_PUBLIC_*` from `.env` into `apps/web/.env.local` when running the web app outside Docker.
 
-Copy `.env.example` to `.env` at the repo root. For the Next.js dashboard, also copy the `NEXT_PUBLIC_*` values into `apps/web/.env.local`.
+### Docker (all services)
+
+```bash
+docker compose up -d --build api worker web
+```
+
+After changing `.env`, recreate containers (rebuild **web** if `NEXT_PUBLIC_*` changed).
+
+### Key environment variables
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `REDIS_URL` | Redis for BullMQ workers |
-| `JWT_SECRET` | Auth token signing secret |
-| `NEXT_PUBLIC_API_URL` | Web app API base (default `http://localhost:4000`) |
-| `CORS_ORIGINS` | Comma-separated browser origins allowed to call the API (default `http://localhost:3000`) |
-| `RUN_CATALOG_SYNC_ON_START` | When `true`, Docker API entrypoint syncs the model catalog after migrations |
-| `EVAL_JUDGE_ENABLED` | Set `true` to score traces and shadow replays with the OpenAI judge |
-| `EVAL_JUDGE_MODEL` | Judge model id (default `gpt-4.1-mini`) |
-| `OPENAI_API_KEY` | Required when judge is enabled |
-| `SHADOW_REPLAY_MODE` | `simulate` for same-provider dev replay without keys; `api` for live replay and **required** for cross-provider verification |
-| `SHADOW_MIN_SAVINGS_USD` | Skip shadow jobs below this estimated savings (default `1`) |
-| `SHADOW_EARLY_STOP_FAILURES` | Stop replay after this many failures with zero passes (default `5`) |
-| `SHADOW_MAX_REPLAYS_PER_EXPERIMENT` | Cap replays per experiment (default `8`; customer pays provider) |
-| `SHADOW_MAX_EXPERIMENTS_PER_PROJECT_PER_DAY` | Cap new shadow experiments queued per project per day (default `12`) |
-| `SHADOW_MAX_REPLAY_CALLS_PER_PROJECT_PER_DAY` | Cap total replay API calls per project per day (default `96`) |
-| `PROVIDER_CREDENTIALS_SECRET` | Encrypts per-project LLM provider keys (OpenAI, Anthropic, Groq, Google, Mistral, Cohere) |
+| `DATABASE_URL` | PostgreSQL |
+| `REDIS_URL` | BullMQ |
+| `JWT_SECRET` | Auth + credential encryption fallback |
+| `SHADOW_REPLAY_MODE` | `simulate` (dev, uses stored scores) or `api` (live replay) |
+| `SHADOW_MAX_REPLAYS_PER_EXPERIMENT` | Default `8` samples per verification |
+| `OPENAI_API_KEY` | Optional in Settings for live replay / judge |
 
-**Shadow economics:** Verified recommendations always use the customer’s provider keys—you pay replay cost, not SentinelAI. Same-provider switches can be verified in `simulate` mode using stored evaluation scores. Cross-provider switches appear as **suggestions** until `SHADOW_REPLAY_MODE=api` and the target provider key is configured; they are never “verified” via simulate.
+## Demo walkthrough (resume-friendly)
 
-### Docker API startup
-
-The API container runs `prisma migrate deploy`, optionally `npm run model-catalog:sync`, then starts NestJS. Compose example:
-
-```bash
-docker compose up -d postgres redis
-docker compose up --build api worker web
-```
-
-Set `CORS_ORIGINS=http://localhost:3000` on the API service when using the bundled web container.
-
-Compose loads the repo root `.env` into **api** and **worker** via `env_file`. After changing `.env`, recreate containers (rebuild **web** if you changed `NEXT_PUBLIC_*`):
-
-```bash
-docker compose up -d --build --force-recreate api worker web
-```
-
-### Smoke test
-
-With the API running locally:
+1. Sign in, create or select a project.
+2. **Settings → Load demo traffic** — renames project to **SupportBot Demo**, seeds 14 `support.answer` traces on `gpt-4.1` (one row at ~0.78 semantic for a borderline replay).
+3. **Overview → Run verification** — same-provider candidate `gpt-4.1-mini`, ~8 replays, typically **7 pass / 1 borderline** → **Needs review** at 87.5% with strong savings estimate.
+4. Open **Verification** — read the “Verified model switch” summary and expand replay evidence (prompt + response previews, reasons, risk categories).
+5. Optional: add OpenAI key in Settings and set `SHADOW_REPLAY_MODE=api` for live replay.
 
 ```bash
 npm run smoke
+./scripts/e2e-recommendations.sh   # with API + worker up
 ```
 
-Override `API_URL`, `SMOKE_EMAIL`, or `SMOKE_PASSWORD` as needed.
+## Product pages
 
-## Roadmap
+| Route | Purpose |
+| --- | --- |
+| `/dashboard` | “Can I safely switch?” — savings, spend, latest verification, CTA |
+| `/tasks` | Per-task models and verification status |
+| `/verification` | Summary + replay evidence |
+| `/traces` | Prompt/response explorer |
+| `/settings` | OpenAI key, thresholds, demo seed, ingestion keys |
 
-- Prompt versioning
-- Regression benchmarking
-- Multi-model comparisons
-- Retrieval quality scoring
-- Streaming trace support
-- OpenTelemetry integration
+Legacy routes redirect: `/projects` → Settings, `/catalog` → Overview.
 
+## Intentionally deferred
 
+- Billing, teams, RBAC
+- Multi-provider marketplace UI
+- Broad “AI analytics” / signal-room style dashboards
+- Stripe, enterprise settings
 
+Cross-provider replay code remains for future use but is not surfaced in the main UI.
+
+## Commands
+
+```bash
+npm run build -w @sentinelai/shared
+npm run test
+npm run build --workspace=@sentinelai/web
+PROJECT_ID=<your-project-id> npm run demo:seed
+```

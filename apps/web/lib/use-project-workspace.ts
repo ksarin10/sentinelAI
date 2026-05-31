@@ -37,7 +37,7 @@ function verificationProgressPercent(verifications: VerificationRecord[], pendin
     (v) => v.experimentStatus === "RUNNING" || v.experimentStatus === "QUEUED"
   );
   if (active?.experimentStatus === "RUNNING") {
-    const completed = active.passedRuns + active.failedRuns;
+    const completed = active.passedRuns + (active.borderlineRuns ?? 0) + active.failedRuns;
     return Math.min(95, Math.max(15, Math.round((completed / 8) * 100)));
   }
   if (pendingExperiments > 0 || active?.experimentStatus === "QUEUED") {
@@ -51,7 +51,7 @@ function verificationStatusMessage(verifications: VerificationRecord[], pendingE
     (v) => v.experimentStatus === "RUNNING" || v.experimentStatus === "QUEUED"
   );
   if (active?.experimentStatus === "RUNNING") {
-    const done = active.passedRuns + active.failedRuns;
+    const done = active.passedRuns + (active.borderlineRuns ?? 0) + active.failedRuns;
     return `Replaying prompt ${Math.min(done + 1, 8)} of ~8 on ${active.taskName} (${active.currentModel} → ${active.candidateModel})…`;
   }
   if (pendingExperiments > 0) {

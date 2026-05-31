@@ -5,36 +5,7 @@ export type SwitchRecommendationStatus =
   | "VERIFYING"
   | "NOT_RUN";
 
-export function passRate(passedRuns: number, failedRuns: number) {
-  const total = passedRuns + failedRuns;
-  if (total === 0) {
-    return null;
-  }
-  return passedRuns / total;
-}
-
-export function deriveSwitchRecommendationStatus(input: {
-  passedRuns: number;
-  failedRuns: number;
-  experimentStatus: "QUEUED" | "RUNNING" | "PASSED" | "FAILED" | string;
-}): SwitchRecommendationStatus {
-  if (input.experimentStatus === "QUEUED" || input.experimentStatus === "RUNNING") {
-    return "VERIFYING";
-  }
-
-  const rate = passRate(input.passedRuns, input.failedRuns);
-  if (rate === null) {
-    return input.experimentStatus === "FAILED" ? "DO_NOT_SWITCH" : "NOT_RUN";
-  }
-
-  if (rate >= 0.9 && input.failedRuns === 0) {
-    return "SAFE_TO_SWITCH";
-  }
-  if (rate >= 0.75) {
-    return "NEEDS_REVIEW";
-  }
-  return "DO_NOT_SWITCH";
-}
+export { deriveSwitchRecommendationStatus, passRate } from "./replay-verdict";
 
 export function switchStatusLabel(status: SwitchRecommendationStatus) {
   switch (status) {

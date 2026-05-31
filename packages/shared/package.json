@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "tsx test/model-catalog.test.ts && tsx test/shadow-experiment.test.ts && tsx test/provider-replay-support.test.ts && tsx test/shadow-economics.test.ts && tsx test/recommendation-candidates.test.ts && tsx test/switch-recommendation.test.ts && tsx test/eval-judge.test.ts",
+    "test": "tsx test/model-catalog.test.ts && tsx test/shadow-experiment.test.ts && tsx test/replay-verdict.test.ts && tsx test/provider-replay-support.test.ts && tsx test/shadow-economics.test.ts && tsx test/recommendation-candidates.test.ts && tsx test/switch-recommendation.test.ts && tsx test/eval-judge.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }
 }

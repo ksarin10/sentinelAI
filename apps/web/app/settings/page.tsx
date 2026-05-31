@@ -245,7 +245,8 @@ export default function SettingsPage() {
             <Card className="border-teal-200 bg-teal-50/60 p-5">
               <h2 className="text-base font-semibold">Demo data</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Load sample support.answer traffic on gpt-4.1, then run verification from Overview.
+                Loads the SupportBot Demo story: 14 support.answer traces on gpt-4.1 (one borderline-quality row). Run
+                verification from Overview to shadow-test gpt-4.1-mini — no cross-provider setup required in simulate mode.
               </p>
               <Button className="mt-4 bg-white text-foreground ring-1 ring-teal-300" onClick={seedDemo} disabled={seedingDemo}>
                 <Database className="mr-2 h-4 w-4" />

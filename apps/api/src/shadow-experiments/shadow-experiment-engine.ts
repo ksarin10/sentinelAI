@@ -1,7 +1,6 @@
 import { TaskRiskLevel } from "@prisma/client";
 import {
   deriveSwitchRecommendationStatus,
-  passRate,
   switchStatusLabel,
   type SwitchRecommendationStatus
 } from "@sentinelai/shared";
@@ -15,7 +14,9 @@ export type PassedShadowExperiment = {
   candidateProvider: string;
   candidateModel: string;
   passedRuns: number;
+  borderlineRuns: number;
   failedRuns: number;
+  criticalFailures: number;
   averageCandidateSemantic: number | null;
   averageCandidateHallucination: number | null;
   estimatedSavingsPercent: number | null;
@@ -97,9 +98,17 @@ export function buildVerifiedRecommendations(
     const savingsPercent = passed.estimatedSavingsPercent ?? candidate.estimatedSavingsPercent;
     const switchStatus = deriveSwitchRecommendationStatus({
       passedRuns: passed.passedRuns,
+      borderlineRuns: passed.borderlineRuns,
       failedRuns: passed.failedRuns,
+      criticalFailures: passed.criticalFailures,
       experimentStatus: "PASSED"
     });
+
+    if (switchStatus === "DO_NOT_SWITCH") {
+      return [];
+    }
+
+    const totalRuns = passed.passedRuns + passed.borderlineRuns + passed.failedRuns;
 
     return [
       {
@@ -112,7 +121,7 @@ export function buildVerifiedRecommendations(
         recommendationType: "REDUCE_COST",
         switchStatus,
         switchStatusLabel: switchStatusLabel(switchStatus),
-        passRate: passRate(passed.passedRuns, passed.failedRuns),
+        passRate: totalRuns === 0 ? null : passed.passedRuns / totalRuns,
         confidence: recommendationConfidence(passed.passedRuns, candidate.riskLevel),
         estimatedSavingsUsd: candidate.estimatedSavingsUsd,
         estimatedSavingsPercent: savingsPercent,

@@ -3,13 +3,18 @@ import { evaluateShadowExperimentCompletion, evaluateShadowRun } from "../src/sh
 
 const passingRun = evaluateShadowRun(0.86, 0.08, 0.8, "MEDIUM");
 assert.equal(passingRun.passed, true);
+assert.equal(passingRun.verdict, "pass");
 
-const failingRun = evaluateShadowRun(0.72, 0.08, 0.8, "MEDIUM");
-assert.equal(failingRun.passed, false);
+const borderlineRun = evaluateShadowRun(0.78, 0.1, 0.8, "MEDIUM");
+assert.equal(borderlineRun.verdict, "borderline");
 
-const completion = evaluateShadowExperimentCompletion(8, 1, 10);
+const completion = evaluateShadowExperimentCompletion(8, 0, 0, 0, 8);
 assert.equal(completion.complete, true);
-assert.equal(completion.passed, true);
+assert.equal(completion.experimentPassed, true);
+assert.equal(completion.switchStatus, "SAFE_TO_SWITCH");
 
-const failedCompletion = evaluateShadowExperimentCompletion(2, 3, 10);
-assert.equal(failedCompletion.passed, false);
+const reviewCompletion = evaluateShadowExperimentCompletion(7, 1, 0, 0, 8);
+assert.equal(reviewCompletion.switchStatus, "NEEDS_REVIEW");
+
+const failedCompletion = evaluateShadowExperimentCompletion(2, 1, 5, 2, 10);
+assert.equal(failedCompletion.experimentPassed, false);

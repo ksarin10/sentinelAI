@@ -39,12 +39,20 @@ console.log('candidates:', data.insights?.candidateCount, 'pending:', data.insig
 console.log('verified:', data.recommendations?.length);
 "
 
-echo "==> Waiting for worker shadow jobs (45s)..."
-sleep 45
+echo "==> Waiting for worker shadow jobs (poll up to 90s)..."
+result=""
+for _ in $(seq 1 30); do
+  sleep 3
+  result=$(curl -sf "${API_URL}/projects/${project_id}/recommendations" \
+    -H "authorization: Bearer ${token}")
+  pending=$(node -e "const d=JSON.parse(process.argv[1]);process.stdout.write(String(d.insights?.pendingExperiments??0))" "${result}")
+  verified=$(node -e "const d=JSON.parse(process.argv[1]);process.stdout.write(String(d.recommendations?.length??0))" "${result}")
+  if [ "${verified}" != "0" ] || [ "${pending}" = "0" ]; then
+    break
+  fi
+done
 
 echo "==> Recommendations (after shadow)"
-result=$(curl -sf "${API_URL}/projects/${project_id}/recommendations" \
-  -H "authorization: Bearer ${token}")
 
 node -e "
 const data = JSON.parse(process.argv[1]);

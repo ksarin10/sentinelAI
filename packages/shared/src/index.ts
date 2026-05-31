@@ -104,3 +104,4 @@ export * from "./shadow-experiment";
 export * from "./shadow/provider-replay-support";
 export * from "./shadow/shadow-economics";
 export * from "./switch-recommendation";
+export * from "./replay-verdict";

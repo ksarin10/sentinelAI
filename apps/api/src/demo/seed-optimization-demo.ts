@@ -76,15 +76,29 @@ function daysAgo(days: number) {
   return date;
 }
 
+const supportPrompt =
+  "Summarize the customer complaint and recommend the next support action for a delayed shipment.";
+const supportResponse =
+  "The customer reports a delayed delivery and missing tracking updates. Verify carrier status, send a proactive update, and offer a replacement or refund if the shipment is lost.";
+
 export async function seedOptimizationDemo(prisma: PrismaClient, projectId: string) {
   const catalogResult = await syncModelCatalog(prisma);
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      name: "SupportBot Demo",
+      description: "14 support traces on gpt-4.1 — run verification to shadow-test gpt-4.1-mini"
+    }
+  });
 
   await prisma.taskProfile.upsert({
     where: { projectId_taskName: { projectId, taskName: "support.answer" } },
     update: {
       riskLevel: "MEDIUM",
       qualityThreshold: 0.8,
-      optimizationGoal: "REDUCE_COST"
+      optimizationGoal: "REDUCE_COST",
+      notes: "SupportBot demo — verified downgrade path"
     },
     create: {
       projectId,
@@ -92,25 +106,41 @@ export async function seedOptimizationDemo(prisma: PrismaClient, projectId: stri
       riskLevel: "MEDIUM",
       qualityThreshold: 0.8,
       optimizationGoal: "REDUCE_COST",
-      notes: "Demo task profile for cost recommendations"
+      notes: "SupportBot demo — verified downgrade path"
     }
   });
 
-  const expensiveSupportTraces: MockTraceSpec[] = Array.from({ length: 8 }, (_, index) => ({
+  const supportScores: Array<{ semanticScore: number; hallucinationScore: number }> = [
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.78, hallucinationScore: 0.1 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 },
+    { semanticScore: 0.86, hallucinationScore: 0.08 }
+  ];
+
+  const expensiveSupportTraces: MockTraceSpec[] = supportScores.map((scores, index) => ({
     name: "support.answer",
     provider: "openai",
     model: "gpt-4.1",
-    prompt: "Summarize the customer complaint and recommend the next support action.",
-    response:
-      "The customer reports a delayed delivery and missing tracking updates. Verify carrier status, send a proactive update, and offer a replacement or refund if the shipment is lost.",
+    prompt: supportPrompt,
+    response: supportResponse,
     promptTokens: 180 + index * 3,
     completionTokens: 120 + index * 2,
-    costUsd: Number((0.0012 + index * 0.00008).toFixed(6)),
-    latencyMs: 900 + index * 40,
-    createdAt: daysAgo(index % 5),
-    semanticScore: 0.86,
-    hallucinationScore: 0.08,
-    metadata: { tags: ["support", "mock"], task: { version: "v1", riskLevel: "MEDIUM" } }
+    costUsd: Number((0.00135 + index * 0.00007).toFixed(6)),
+    latencyMs: 900 + index * 35,
+    createdAt: daysAgo(index % 7),
+    semanticScore: scores.semanticScore,
+    hallucinationScore: scores.hallucinationScore,
+    metadata: { tags: ["support", "demo"], task: { version: "v1", riskLevel: "MEDIUM" } }
   }));
 
   const retiringModelTraces: MockTraceSpec[] = Array.from({ length: 6 }, (_, index) => ({
@@ -127,7 +157,7 @@ export async function seedOptimizationDemo(prisma: PrismaClient, projectId: stri
     createdAt: daysAgo(index % 4),
     semanticScore: 0.84,
     hallucinationScore: 0.1,
-    metadata: { tags: ["policy", "mock"], task: { version: "v2", riskLevel: "HIGH" } }
+    metadata: { tags: ["policy", "demo"], task: { version: "v2", riskLevel: "HIGH" } }
   }));
 
   for (const spec of [...expensiveSupportTraces, ...retiringModelTraces]) {
@@ -140,7 +170,8 @@ export async function seedOptimizationDemo(prisma: PrismaClient, projectId: stri
     recommendationPreview: {
       taskName: "support.answer",
       currentModel: "gpt-4.1",
-      suggestedModel: "gpt-4.1-mini"
+      suggestedModel: "gpt-4.1-mini",
+      note: "14 support traces seeded; expect 7–8 replay samples with one borderline row in simulate mode."
     },
     migrationPreview: {
       model: "claude-sonnet-4.5",
