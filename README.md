@@ -81,10 +81,15 @@ Copy `.env.example` to `.env` at the repo root. For the Next.js dashboard, also 
 | `EVAL_JUDGE_ENABLED` | Set `true` to score traces and shadow replays with the OpenAI judge |
 | `EVAL_JUDGE_MODEL` | Judge model id (default `gpt-4.1-mini`) |
 | `OPENAI_API_KEY` | Required when judge is enabled |
-| `SHADOW_REPLAY_MODE` | `simulate` locally or `api` for live provider replay |
+| `SHADOW_REPLAY_MODE` | `simulate` for same-provider dev replay without keys; `api` for live replay and **required** for cross-provider verification |
 | `SHADOW_MIN_SAVINGS_USD` | Skip shadow jobs below this estimated savings (default `1`) |
 | `SHADOW_EARLY_STOP_FAILURES` | Stop replay after this many failures with zero passes (default `5`) |
-| `PROVIDER_CREDENTIALS_SECRET` | Encrypts per-project LLM provider keys |
+| `SHADOW_MAX_REPLAYS_PER_EXPERIMENT` | Cap replays per experiment (default `8`; customer pays provider) |
+| `SHADOW_MAX_EXPERIMENTS_PER_PROJECT_PER_DAY` | Cap new shadow experiments queued per project per day (default `12`) |
+| `SHADOW_MAX_REPLAY_CALLS_PER_PROJECT_PER_DAY` | Cap total replay API calls per project per day (default `96`) |
+| `PROVIDER_CREDENTIALS_SECRET` | Encrypts per-project LLM provider keys (OpenAI, Anthropic, Groq, Google, Mistral, Cohere) |
+
+**Shadow economics:** Verified recommendations always use the customer’s provider keys—you pay replay cost, not SentinelAI. Same-provider switches can be verified in `simulate` mode using stored evaluation scores. Cross-provider switches appear as **suggestions** until `SHADOW_REPLAY_MODE=api` and the target provider key is configured; they are never “verified” via simulate.
 
 ### Docker API startup
 
