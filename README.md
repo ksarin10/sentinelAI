@@ -1,5 +1,7 @@
 # SentinelAI
 
+[![CI](https://github.com/ksarin10/sentinelAI/actions/workflows/ci.yml/badge.svg)](https://github.com/ksarin10/sentinelAI/actions/workflows/ci.yml)
+
 Verified model switching for LLM applications. SentinelAI ingests production traces, identifies same-provider downgrade candidates per task, replays sampled prompts against the candidate model, and returns a switch recommendation with estimated savings and per-replay evidence.
 
 Switch outcomes:
@@ -18,6 +20,16 @@ Pass rate is `passed / (passed + borderline + failed)`. Borderline replays count
 - Background shadow verification (simulate or live provider replay)
 - Per-replay verdicts: pass, borderline, or fail, with reasons and risk categories
 - Dashboard for overview, tasks, verification evidence, traces, and project settings
+
+## Engineering highlights
+
+- TypeScript monorepo with separate API, worker, web, SDK, and shared-domain packages
+- Asynchronous evaluation and replay jobs backed by Redis and BullMQ
+- PostgreSQL persistence with Prisma migrations
+- Encrypted per-project provider credentials
+- Deterministic simulation mode for local development without provider API calls
+- Unit, smoke, and end-to-end test paths enforced by GitHub Actions
+- Docker Compose setup for the application and its dependencies
 
 ## Architecture
 
