@@ -78,6 +78,35 @@ func TestWorkerReturnsEmptyWhenNoWorkExists(t *testing.T) {
 	}
 }
 
+func TestWorkerDeliversClaimRecoveredAfterCrash(t *testing.T) {
+	root := t.TempDir()
+	beforeCrash, err := spool.Open(root, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = beforeCrash.Enqueue(context.Background(), queue.Item{ID: "crash-test", APIKey: "project-key", Body: []byte(`{}`)})
+	if _, err := beforeCrash.Claim(context.Background(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	deliveries := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		deliveries++
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer upstream.Close()
+	restarted, err := spool.Open(root, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := testWorker(restarted, upstream.URL).RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if deliveries != 1 || restarted.Pending() != 0 {
+		t.Fatalf("deliveries = %d pending = %d", deliveries, restarted.Pending())
+	}
+}
+
 func openStore(t *testing.T) *spool.Spool {
 	t.Helper()
 	store, err := spool.Open(t.TempDir(), 10)
