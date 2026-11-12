@@ -1,0 +1,15 @@
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY services/ingest-gateway/go.mod ./
+COPY services/ingest-gateway/cmd ./cmd
+COPY services/ingest-gateway/internal ./internal
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ingest-gateway ./cmd/ingest-gateway
+
+FROM alpine:3.21
+RUN addgroup -S sentinel && adduser -S -G sentinel sentinel \
+  && mkdir -p /var/lib/sentinelai-ingest \
+  && chown -R sentinel:sentinel /var/lib/sentinelai-ingest
+USER sentinel
+COPY --from=build /out/ingest-gateway /usr/local/bin/ingest-gateway
+EXPOSE 4100 4101
+ENTRYPOINT ["ingest-gateway"]
