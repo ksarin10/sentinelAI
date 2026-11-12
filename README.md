@@ -15,6 +15,7 @@ Pass rate is `passed / (passed + borderline + failed)`. Borderline replays count
 ## Capabilities
 
 - Trace ingestion via REST API or TypeScript SDK
+- Crash-safe asynchronous ingestion through a Go gateway
 - Task-level cost and quality analytics
 - Same-provider model recommendations from catalog pricing
 - Background shadow verification (simulate or live provider replay)
@@ -23,6 +24,7 @@ Pass rate is `passed / (passed + borderline + failed)`. Borderline replays count
 
 ## Engineering highlights
 
+- Go ingestion gateway with an fsync-backed spool, bounded overload behavior, retry backoff, and dead letters
 - TypeScript monorepo with separate API, worker, web, SDK, and shared-domain packages
 - Asynchronous evaluation and replay jobs backed by Redis and BullMQ
 - PostgreSQL persistence with Prisma migrations
@@ -36,10 +38,14 @@ Pass rate is `passed / (passed + borderline + failed)`. Borderline replays count
 ```mermaid
 flowchart LR
   subgraph ingest [Ingest]
-    SDK[TypeScript SDK / API key]
+    SDK[Applications / TypeScript SDK]
+    GATEWAY[Go durable gateway]
+    SPOOL[(Disk spool)]
     API[apps/api NestJS]
     PG[(PostgreSQL)]
-    SDK --> API --> PG
+    SDK --> GATEWAY
+    GATEWAY --> SPOOL
+    GATEWAY --> API --> PG
   end
   subgraph verify [Verify]
     W[apps/worker BullMQ]
@@ -62,6 +68,7 @@ flowchart LR
 | `apps/api` | Auth, projects, ingestion, analytics, recommendations, verifications |
 | `apps/worker` | BullMQ evaluations and shadow experiments |
 | `apps/web` | Dashboard (Overview, Tasks, Verification, Traces, Settings) |
+| `services/ingest-gateway` | Durable Go intake, bounded queue, retry workers, metrics, pprof |
 | `packages/shared` | Replay verdicts, switch rules, shadow economics |
 | `packages/sdk` | Client library for trace ingestion |
 | `prisma/` | Schema and migrations |
@@ -93,13 +100,15 @@ npm run dev:web
 
 - Web: `http://localhost:3000`
 - API: `http://localhost:4000/api`
+- Durable ingestion: `http://localhost:4100/v1/traces`
+- Ingestion metrics and pprof: `http://localhost:4101` (loopback only in Docker Compose)
 
 Copy `NEXT_PUBLIC_*` from `.env` into `apps/web/.env.local` when running the web app outside Docker.
 
 ### Docker
 
 ```bash
-docker compose up -d --build api worker web
+docker compose up -d --build api ingest worker web
 ```
 
 Recreate containers after changing `.env` (rebuild `web` when `NEXT_PUBLIC_*` changes).
@@ -116,6 +125,27 @@ Recreate containers after changing `.env` (rebuild `web` when `NEXT_PUBLIC_*` ch
 | `SHADOW_MIN_SAVINGS_USD` | Minimum estimated savings to queue shadow work |
 | `OPENAI_API_KEY` | Live replay and optional LLM judge (Settings or env) |
 | `PROVIDER_CREDENTIALS_SECRET` | Encrypts per-project provider keys (defaults to `JWT_SECRET`) |
+| `INGEST_MAX_PENDING` | Hard limit for queued and in-flight traces (default `100000`) |
+| `INGEST_WORKERS` | Concurrent upstream delivery workers (default `8`) |
+| `INGEST_MAX_ATTEMPTS` | Retry budget before a trace enters the dead-letter directory (default `12`) |
+
+## Durable ingestion
+
+Point the SDK at the gateway when the application should not wait for PostgreSQL and evaluation queue work:
+
+```ts
+const sentinel = new SentinelAI({
+  apiKey: process.env.SENTINELAI_API_KEY!,
+  durableIngestionUrl: "http://localhost:4100",
+  sourceApp: "checkout-api"
+});
+```
+
+The gateway requires an idempotency key, writes the trace to an fsync-backed spool, and only then returns `202 Accepted`. Delivery to the NestJS API is at least once. A project-scoped database constraint makes the sink idempotent, including concurrent retries. When the spool reaches its configured limit, the gateway returns `503` with `Retry-After: 1`; it does not accept and discard the trace.
+
+Transient network errors, `408`, `429`, and `5xx` responses retry with capped exponential backoff and jitter. Permanent `4xx` responses and exhausted retries are retained under the spool's `dead/` directory for inspection. On startup, work found under `processing/` returns to the ready queue unless a durable receipt proves it already completed.
+
+See [the reliability and benchmark report](docs/ingestion-reliability.md) for the failure matrix, reproducible load test, p50/p95/p99 results, and CPU-profile-driven optimization.
 
 ## Demo data
 
