@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/metrics"
 	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/queue"
 )
 
@@ -27,7 +28,7 @@ func TestIngestRequiresIdempotencyKey(t *testing.T) {
 	request := httptest.NewRequest(http.MethodPost, "/v1/traces", strings.NewReader(`{}`))
 	request.Header.Set("X-API-Key", "secret")
 
-	New(&recordingQueue{}).Handler().ServeHTTP(recorder, request)
+	New(&recordingQueue{}, metrics.New()).Handler().ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
@@ -42,7 +43,7 @@ func TestIngestInjectsExternalIDAndAccepts(t *testing.T) {
 	request.Header.Set("Idempotency-Key", "app-a/trace-42")
 	request.Header.Set("X-Sentinel-Source", "support-api")
 
-	New(q).Handler().ServeHTTP(recorder, request)
+	New(q, metrics.New()).Handler().ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusAccepted {
 		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusAccepted, recorder.Body.String())
@@ -65,7 +66,7 @@ func TestIngestReturnsRetryableOverload(t *testing.T) {
 	request.Header.Set("X-API-Key", "secret")
 	request.Header.Set("Idempotency-Key", "trace-42")
 
-	New(&recordingQueue{err: queue.ErrFull}).Handler().ServeHTTP(recorder, request)
+	New(&recordingQueue{err: queue.ErrFull}, metrics.New()).Handler().ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusServiceUnavailable || recorder.Header().Get("Retry-After") != "1" {
 		t.Fatalf("status = %d retry-after = %q", recorder.Code, recorder.Header().Get("Retry-After"))

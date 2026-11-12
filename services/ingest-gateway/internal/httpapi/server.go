@@ -9,18 +9,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/metrics"
 	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/queue"
 )
 
 const maxBodyBytes = 1 << 20
 
 type Server struct {
-	queue queue.Queue
-	now   func() time.Time
+	queue   queue.Queue
+	metrics *metrics.Registry
+	now     func() time.Time
 }
 
-func New(q queue.Queue) *Server {
-	return &Server{queue: q, now: time.Now}
+func New(q queue.Queue, registry *metrics.Registry) *Server {
+	return &Server{queue: q, metrics: registry, now: time.Now}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -35,6 +37,10 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
+	started := s.now()
+	resultLabel := "invalid"
+	defer func() { s.metrics.Ingress(resultLabel, s.now().Sub(started)) }()
+
 	idempotencyKey := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
 	if idempotencyKey == "" || len(idempotencyKey) > 200 {
 		writeError(w, http.StatusBadRequest, "Idempotency-Key is required and must be at most 200 characters")
@@ -71,6 +77,7 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 		ReceivedAt:    s.now().UTC(),
 	})
 	if errors.Is(err, queue.ErrFull) {
+		resultLabel = "overload"
 		w.Header().Set("Retry-After", "1")
 		writeError(w, http.StatusServiceUnavailable, "durable queue is at capacity; retry with the same idempotency key")
 		return
@@ -78,6 +85,11 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "trace was not accepted")
 		return
+	}
+	if result.Duplicate {
+		resultLabel = "duplicate"
+	} else {
+		resultLabel = "accepted"
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]any{

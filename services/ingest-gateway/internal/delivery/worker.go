@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/metrics"
 	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/spool"
 )
 
@@ -38,12 +39,13 @@ type Worker struct {
 	client  *http.Client
 	config  Config
 	logger  *slog.Logger
+	metrics *metrics.Registry
 	now     func() time.Time
 	backoff func(int) time.Duration
 }
 
-func New(store Store, client *http.Client, config Config, logger *slog.Logger) *Worker {
-	worker := &Worker{store: store, client: client, config: config, logger: logger, now: time.Now}
+func New(store Store, client *http.Client, config Config, logger *slog.Logger, registry *metrics.Registry) *Worker {
+	worker := &Worker{store: store, client: client, config: config, logger: logger, metrics: registry, now: time.Now}
 	worker.backoff = worker.exponentialBackoff
 	return worker
 }
@@ -109,7 +111,11 @@ func (w *Worker) deliver(ctx context.Context, lease *spool.Lease) error {
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
 
 	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		return w.store.Ack(lease, w.now())
+		if err := w.store.Ack(lease, w.now()); err != nil {
+			return err
+		}
+		w.metrics.Delivery("delivered")
+		return nil
 	}
 	if isPermanent(response.StatusCode) {
 		return w.deadLetter(lease, fmt.Sprintf("upstream returned %d", response.StatusCode))
@@ -125,6 +131,7 @@ func (w *Worker) retry(lease *spool.Lease, reason string) error {
 	if err := w.store.Retry(lease, nextAttempt); err != nil {
 		return fmt.Errorf("persist retry after %s: %w", reason, err)
 	}
+	w.metrics.Delivery("retry")
 	return nil
 }
 
@@ -133,6 +140,7 @@ func (w *Worker) deadLetter(lease *spool.Lease, reason string) error {
 		return fmt.Errorf("persist dead letter: %w", err)
 	}
 	w.logger.Warn("trace moved to dead letter", "id", lease.Item.ID, "reason", reason)
+	w.metrics.Delivery("dead_letter")
 	return nil
 }
 

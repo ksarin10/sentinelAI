@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/metrics"
 	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/queue"
 	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/spool"
 )
@@ -94,5 +95,5 @@ func testWorker(store Store, upstreamURL string) *Worker {
 		PollEvery:   time.Millisecond,
 		BaseBackoff: time.Millisecond,
 		MaxBackoff:  time.Second,
-	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	}, slog.New(slog.NewTextHandler(io.Discard, nil)), metrics.New())
 }

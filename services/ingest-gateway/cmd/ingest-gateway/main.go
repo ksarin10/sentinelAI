@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/delivery"
 	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/httpapi"
+	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/metrics"
 	"github.com/ksarin10/sentinelAI/services/ingest-gateway/internal/spool"
 )
 
@@ -26,6 +28,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+	registry := metrics.New()
 
 	worker := delivery.New(store, &http.Client{Timeout: 10 * time.Second}, delivery.Config{
 		UpstreamURL: env("INGEST_UPSTREAM_URL", "http://api:4000"),
@@ -34,12 +37,12 @@ func main() {
 		PollEvery:   100 * time.Millisecond,
 		BaseBackoff: 250 * time.Millisecond,
 		MaxBackoff:  30 * time.Second,
-	}, logger)
+	}, logger, registry)
 	go worker.Run(ctx)
 
 	server := &http.Server{
 		Addr:              env("INGEST_ADDR", ":4100"),
-		Handler:           httpapi.New(store).Handler(),
+		Handler:           httpapi.New(store, registry).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -53,11 +56,37 @@ func main() {
 		}
 	}()
 
+	adminMux := http.NewServeMux()
+	adminMux.Handle("GET /metrics", registry.Handler(store.Pending))
+	adminMux.HandleFunc("GET /debug/pprof/", pprof.Index)
+	adminMux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+	adminMux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+	adminMux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+	adminMux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
+	adminMux.Handle("GET /debug/pprof/goroutine", pprof.Handler("goroutine"))
+	adminMux.Handle("GET /debug/pprof/heap", pprof.Handler("heap"))
+	adminMux.Handle("GET /debug/pprof/allocs", pprof.Handler("allocs"))
+	adminServer := &http.Server{
+		Addr:              env("INGEST_ADMIN_ADDR", ":4101"),
+		Handler:           adminMux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		logger.Info("ingestion admin server listening", "address", adminServer.Addr)
+		if err := adminServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("ingestion admin server stopped", "error", err)
+			stop()
+		}
+	}()
+
 	<-ctx.Done()
 	shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownContext); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
+	}
+	if err := adminServer.Shutdown(shutdownContext); err != nil {
+		logger.Error("admin server graceful shutdown failed", "error", err)
 	}
 }
 
