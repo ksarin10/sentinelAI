@@ -26,7 +26,12 @@ type Spool struct {
 	maxPending int
 	mu         sync.Mutex
 	pending    int
-	known      map[string]struct{}
+	known      map[string]*enqueueState
+}
+
+type enqueueState struct {
+	done chan struct{}
+	err  error
 }
 
 type Lease struct {
@@ -55,35 +60,53 @@ func Open(root string, maxPending int) (*Spool, error) {
 		}
 	}
 
-	s := &Spool{root: root, maxPending: maxPending, known: make(map[string]struct{})}
+	s := &Spool{root: root, maxPending: maxPending, known: make(map[string]*enqueueState)}
 	if err := s.recover(); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func (s *Spool) Enqueue(_ context.Context, item queue.Item) (queue.EnqueueResult, error) {
+func (s *Spool) Enqueue(ctx context.Context, item queue.Item) (queue.EnqueueResult, error) {
 	key := itemKey(item)
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.exists(key) {
-		return queue.EnqueueResult{Duplicate: true}, nil
+	if state, exists := s.known[key]; exists {
+		s.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return queue.EnqueueResult{}, ctx.Err()
+		case <-state.done:
+			if state.err != nil {
+				return s.Enqueue(ctx, item)
+			}
+			return queue.EnqueueResult{Duplicate: true}, nil
+		}
 	}
 	if s.pending >= s.maxPending {
+		s.mu.Unlock()
 		return queue.EnqueueResult{}, queue.ErrFull
 	}
+	state := &enqueueState{done: make(chan struct{})}
+	s.known[key] = state
+	s.pending++
+	s.mu.Unlock()
 
 	data, err := json.Marshal(item)
 	if err != nil {
-		return queue.EnqueueResult{}, fmt.Errorf("encode queued trace: %w", err)
+		err = fmt.Errorf("encode queued trace: %w", err)
+	} else {
+		err = s.atomicWrite("ready", key, data)
 	}
-	if err := s.atomicWrite("ready", key, data); err != nil {
-		return queue.EnqueueResult{}, err
+
+	s.mu.Lock()
+	state.err = err
+	if err != nil {
+		delete(s.known, key)
+		s.pending--
 	}
-	s.known[key] = struct{}{}
-	s.pending++
-	return queue.EnqueueResult{}, nil
+	close(state.done)
+	s.mu.Unlock()
+	return queue.EnqueueResult{}, err
 }
 
 func (s *Spool) Claim(_ context.Context, now time.Time) (*Lease, error) {
@@ -236,16 +259,13 @@ func (s *Spool) recover() error {
 		}
 		for _, entry := range entries {
 			if !entry.IsDir() && strings.HasSuffix(entry.Name(), fileSuffix) {
-				s.known[strings.TrimSuffix(entry.Name(), fileSuffix)] = struct{}{}
+				done := make(chan struct{})
+				close(done)
+				s.known[strings.TrimSuffix(entry.Name(), fileSuffix)] = &enqueueState{done: done}
 			}
 		}
 	}
 	return nil
-}
-
-func (s *Spool) exists(key string) bool {
-	_, exists := s.known[key]
-	return exists
 }
 
 func (s *Spool) atomicWrite(state, key string, data []byte) error {

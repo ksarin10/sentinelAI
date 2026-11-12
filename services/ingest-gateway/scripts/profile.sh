@@ -6,7 +6,7 @@ mkdir -p "$output_dir"
 
 go test ./internal/spool \
   -run '^$' \
-  -bench 'Benchmark(Durable|Duplicate)Enqueue$' \
+  -bench 'Benchmark(DurableEnqueue|DurableEnqueueParallel|DuplicateEnqueue)$' \
   -benchmem \
   -count 5 \
   -cpuprofile "$output_dir/cpu.pprof" \
