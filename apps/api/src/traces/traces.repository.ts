@@ -10,6 +10,13 @@ export class TracesRepository {
     return this.prisma.trace.create({ data });
   }
 
+  findByExternalId(projectId: string, externalId: string) {
+    return this.prisma.trace.findUnique({
+      where: { projectId_externalId: { projectId, externalId } },
+      include: { evaluations: { orderBy: { createdAt: "desc" }, take: 1 } }
+    });
+  }
+
   list(projectId: string) {
     return this.prisma.trace.findMany({
       where: { projectId },

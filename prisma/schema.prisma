@@ -175,8 +175,8 @@ model Trace {
   createdAt        DateTime     @default(now())
   evaluations      Evaluation[]
 
+  @@unique([projectId, externalId])
   @@index([projectId, createdAt])
-  @@index([externalId])
   @@index([provider, model])
 }
 
