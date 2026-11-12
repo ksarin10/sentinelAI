@@ -3,6 +3,14 @@ import type { IngestTraceRequest, IngestTraceResponse, ModelExperimentMetadata, 
 export type SentinelAIClientOptions = {
   apiKey: string;
   baseUrl?: string;
+  durableIngestionUrl?: string;
+  sourceApp?: string;
+};
+
+export type DurableIngestTraceResponse = {
+  idempotencyKey: string;
+  accepted: true;
+  duplicate: boolean;
 };
 
 export type SentinelAITraceRequest = IngestTraceRequest & {
@@ -31,18 +39,26 @@ export function normalizeTracePayload(payload: SentinelAITraceRequest): IngestTr
 export class SentinelAI {
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  private readonly durableIngestionUrl?: string;
+  private readonly sourceApp?: string;
 
   constructor(options: SentinelAIClientOptions) {
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl ?? "http://localhost:4000/api";
+    this.durableIngestionUrl = options.durableIngestionUrl?.replace(/\/$/, "");
+    this.sourceApp = options.sourceApp;
   }
 
-  async trace(payload: SentinelAITraceRequest): Promise<IngestTraceResponse> {
-    const response = await fetch(`${this.baseUrl}/ingest/traces`, {
+  async trace(payload: SentinelAITraceRequest): Promise<IngestTraceResponse | DurableIngestTraceResponse> {
+    const durable = Boolean(this.durableIngestionUrl);
+    const idempotencyKey = payload.externalId ?? globalThis.crypto.randomUUID();
+    const response = await fetch(durable ? `${this.durableIngestionUrl}/v1/traces` : `${this.baseUrl}/ingest/traces`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-sentinel-api-key": this.apiKey
+        "x-sentinel-api-key": this.apiKey,
+        ...(durable ? { "idempotency-key": idempotencyKey } : {}),
+        ...(durable && this.sourceApp ? { "x-sentinel-source": this.sourceApp } : {})
       },
       body: JSON.stringify(normalizeTracePayload(payload))
     });
@@ -52,7 +68,7 @@ export class SentinelAI {
       throw new Error(`SentinelAI ingestion failed: ${response.status} ${message}`);
     }
 
-    return response.json() as Promise<IngestTraceResponse>;
+    return response.json() as Promise<IngestTraceResponse | DurableIngestTraceResponse>;
   }
 
   async observe<T>(name: string, run: () => Promise<T>, options?: SentinelAIObserveOptions) {
