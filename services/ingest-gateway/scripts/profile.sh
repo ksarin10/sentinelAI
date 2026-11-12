@@ -5,6 +5,7 @@ output_dir="${1:-profiles}"
 mkdir -p "$output_dir"
 
 go test ./internal/spool \
+  -o "$output_dir/spool.test" \
   -run '^$' \
   -bench 'Benchmark(DurableEnqueue|DurableEnqueueParallel|DuplicateEnqueue)$' \
   -benchmem \
