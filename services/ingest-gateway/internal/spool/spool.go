@@ -26,6 +26,7 @@ type Spool struct {
 	maxPending int
 	mu         sync.Mutex
 	pending    int
+	known      map[string]struct{}
 }
 
 type Lease struct {
@@ -54,7 +55,7 @@ func Open(root string, maxPending int) (*Spool, error) {
 		}
 	}
 
-	s := &Spool{root: root, maxPending: maxPending}
+	s := &Spool{root: root, maxPending: maxPending, known: make(map[string]struct{})}
 	if err := s.recover(); err != nil {
 		return nil, err
 	}
@@ -80,6 +81,7 @@ func (s *Spool) Enqueue(_ context.Context, item queue.Item) (queue.EnqueueResult
 	if err := s.atomicWrite("ready", key, data); err != nil {
 		return queue.EnqueueResult{}, err
 	}
+	s.known[key] = struct{}{}
 	s.pending++
 	return queue.EnqueueResult{}, nil
 }
@@ -227,16 +229,23 @@ func (s *Spool) recover() error {
 		return err
 	}
 	s.pending = readyCount + processingCount
+	for _, state := range []string{"ready", "processing", "receipts", "dead"} {
+		entries, err := os.ReadDir(s.directory(state))
+		if err != nil {
+			return fmt.Errorf("rebuild spool index: %w", err)
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), fileSuffix) {
+				s.known[strings.TrimSuffix(entry.Name(), fileSuffix)] = struct{}{}
+			}
+		}
+	}
 	return nil
 }
 
 func (s *Spool) exists(key string) bool {
-	for _, state := range []string{"ready", "processing", "receipts", "dead"} {
-		if fileExists(s.path(state, key)) {
-			return true
-		}
-	}
-	return false
+	_, exists := s.known[key]
+	return exists
 }
 
 func (s *Spool) atomicWrite(state, key string, data []byte) error {
