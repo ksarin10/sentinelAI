@@ -42,9 +42,12 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authorization := strings.TrimSpace(r.Header.Get("Authorization"))
-	apiKey := strings.TrimSpace(r.Header.Get("X-API-Key"))
+	apiKey := strings.TrimSpace(r.Header.Get("X-Sentinel-API-Key"))
+	if apiKey == "" {
+		apiKey = strings.TrimSpace(r.Header.Get("X-API-Key"))
+	}
 	if authorization == "" && apiKey == "" {
-		writeError(w, http.StatusUnauthorized, "Authorization or X-API-Key is required")
+		writeError(w, http.StatusUnauthorized, "Authorization or X-Sentinel-API-Key is required")
 		return
 	}
 

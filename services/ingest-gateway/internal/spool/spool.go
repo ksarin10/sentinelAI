@@ -38,11 +38,17 @@ type receipt struct {
 	CompletedAt time.Time `json:"completedAt"`
 }
 
+type deadLetter struct {
+	Item     queue.Item `json:"item"`
+	Reason   string     `json:"reason"`
+	FailedAt time.Time  `json:"failedAt"`
+}
+
 func Open(root string, maxPending int) (*Spool, error) {
 	if maxPending < 1 {
 		return nil, fmt.Errorf("max pending must be positive")
 	}
-	for _, directory := range []string{"ready", "processing", "receipts", "tmp"} {
+	for _, directory := range []string{"ready", "processing", "receipts", "dead", "tmp"} {
 		if err := os.MkdirAll(filepath.Join(root, directory), 0o750); err != nil {
 			return nil, fmt.Errorf("create spool directory: %w", err)
 		}
@@ -159,6 +165,29 @@ func (s *Spool) Retry(lease *Lease, nextAttemptAt time.Time) error {
 	return syncDirectory(s.directory("processing"))
 }
 
+func (s *Spool) DeadLetter(lease *Lease, reason string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := json.Marshal(deadLetter{Item: lease.Item, Reason: reason, FailedAt: now.UTC()})
+	if err != nil {
+		return fmt.Errorf("encode dead letter: %w", err)
+	}
+	if err := s.atomicWrite("dead", lease.key, data); err != nil {
+		return err
+	}
+	if err := os.Remove(s.path("processing", lease.key)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove failed trace: %w", err)
+	}
+	if err := syncDirectory(s.directory("processing")); err != nil {
+		return err
+	}
+	if s.pending > 0 {
+		s.pending--
+	}
+	return nil
+}
+
 func (s *Spool) Pending() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -202,7 +231,7 @@ func (s *Spool) recover() error {
 }
 
 func (s *Spool) exists(key string) bool {
-	for _, state := range []string{"ready", "processing", "receipts"} {
+	for _, state := range []string{"ready", "processing", "receipts", "dead"} {
 		if fileExists(s.path(state, key)) {
 			return true
 		}
