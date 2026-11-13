@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,12 +76,19 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 		Authorization: authorization,
 		APIKey:        apiKey,
 		SourceApp:     strings.TrimSpace(r.Header.Get("X-Sentinel-Source")),
+		TenantHash:    tenantHash(authorization, apiKey),
 		ReceivedAt:    s.now().UTC(),
 	})
 	if errors.Is(err, queue.ErrFull) {
 		resultLabel = "overload"
 		w.Header().Set("Retry-After", "1")
 		writeError(w, http.StatusServiceUnavailable, "durable queue is at capacity; retry with the same idempotency key")
+		return
+	}
+	if errors.Is(err, queue.ErrTenantFull) {
+		resultLabel = "tenant_overload"
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusTooManyRequests, "API-key queue is at capacity; retry with the same idempotency key")
 		return
 	}
 	if err != nil {
@@ -97,6 +106,11 @@ func (s *Server) ingest(w http.ResponseWriter, r *http.Request) {
 		"accepted":       true,
 		"duplicate":      result.Duplicate,
 	})
+}
+
+func tenantHash(authorization, apiKey string) string {
+	sum := sha256.Sum256([]byte(authorization + "\x00" + apiKey))
+	return hex.EncodeToString(sum[:])
 }
 
 func withExternalID(body []byte, idempotencyKey string) ([]byte, error) {

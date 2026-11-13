@@ -62,12 +62,9 @@ func TestEncryptedSpoolRejectsWrongSecret(t *testing.T) {
 	}
 	_, _ = store.Enqueue(context.Background(), queue.Item{ID: "trace-42", APIKey: "secret", Body: []byte(`{}`)})
 
-	reopened, err := OpenEncrypted(root, 10, "different-secret-with-at-least-32-characters")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := reopened.Claim(context.Background(), time.Now()); err == nil || !strings.Contains(err.Error(), "authentication failed") {
-		t.Fatalf("claim error = %v, want authentication failure", err)
+	_, err = OpenEncrypted(root, 10, "different-secret-with-at-least-32-characters")
+	if err == nil || !strings.Contains(err.Error(), "authentication failed") {
+		t.Fatalf("open error = %v, want authentication failure", err)
 	}
 }
 

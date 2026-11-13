@@ -72,3 +72,16 @@ func TestIngestReturnsRetryableOverload(t *testing.T) {
 		t.Fatalf("status = %d retry-after = %q", recorder.Code, recorder.Header().Get("Retry-After"))
 	}
 }
+
+func TestIngestReturnsProjectSpecificOverload(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/traces", strings.NewReader(`{}`))
+	request.Header.Set("X-Sentinel-API-Key", "secret")
+	request.Header.Set("Idempotency-Key", "trace-42")
+
+	New(&recordingQueue{err: queue.ErrTenantFull}, metrics.New()).Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusTooManyRequests || recorder.Header().Get("Retry-After") != "1" {
+		t.Fatalf("status = %d retry-after = %q", recorder.Code, recorder.Header().Get("Retry-After"))
+	}
+}

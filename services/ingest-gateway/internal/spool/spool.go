@@ -22,12 +22,14 @@ const fileSuffix = ".json"
 var ErrEmpty = errors.New("ingestion queue is empty")
 
 type Spool struct {
-	root       string
-	maxPending int
-	mu         sync.Mutex
-	pending    int
-	known      map[string]*enqueueState
-	codec      *codec
+	root                string
+	maxPending          int
+	maxPendingPerTenant int
+	mu                  sync.Mutex
+	pending             int
+	pendingByTenant     map[string]int
+	known               map[string]*enqueueState
+	codec               *codec
 }
 
 type enqueueState struct {
@@ -52,12 +54,19 @@ type deadLetter struct {
 }
 
 func Open(root string, maxPending int) (*Spool, error) {
-	return OpenEncrypted(root, maxPending, "")
+	return OpenWithLimits(root, maxPending, maxPending, "")
 }
 
 func OpenEncrypted(root string, maxPending int, secret string) (*Spool, error) {
+	return OpenWithLimits(root, maxPending, maxPending, secret)
+}
+
+func OpenWithLimits(root string, maxPending, maxPendingPerTenant int, secret string) (*Spool, error) {
 	if maxPending < 1 {
 		return nil, fmt.Errorf("max pending must be positive")
+	}
+	if maxPendingPerTenant < 1 || maxPendingPerTenant > maxPending {
+		return nil, fmt.Errorf("max pending per tenant must be positive and no greater than max pending")
 	}
 	recordCodec, err := newCodec(secret)
 	if err != nil {
@@ -69,7 +78,14 @@ func OpenEncrypted(root string, maxPending int, secret string) (*Spool, error) {
 		}
 	}
 
-	s := &Spool{root: root, maxPending: maxPending, known: make(map[string]*enqueueState), codec: recordCodec}
+	s := &Spool{
+		root:                root,
+		maxPending:          maxPending,
+		maxPendingPerTenant: maxPendingPerTenant,
+		pendingByTenant:     make(map[string]int),
+		known:               make(map[string]*enqueueState),
+		codec:               recordCodec,
+	}
 	if err := s.recover(); err != nil {
 		return nil, err
 	}
@@ -77,6 +93,9 @@ func OpenEncrypted(root string, maxPending int, secret string) (*Spool, error) {
 }
 
 func (s *Spool) Enqueue(ctx context.Context, item queue.Item) (queue.EnqueueResult, error) {
+	if item.TenantHash == "" {
+		item.TenantHash = credentialHash(item.Authorization, item.APIKey)
+	}
 	key := itemKey(item)
 	s.mu.Lock()
 	if state, exists := s.known[key]; exists {
@@ -95,9 +114,14 @@ func (s *Spool) Enqueue(ctx context.Context, item queue.Item) (queue.EnqueueResu
 		s.mu.Unlock()
 		return queue.EnqueueResult{}, queue.ErrFull
 	}
+	if s.pendingByTenant[item.TenantHash] >= s.maxPendingPerTenant {
+		s.mu.Unlock()
+		return queue.EnqueueResult{}, queue.ErrTenantFull
+	}
 	state := &enqueueState{done: make(chan struct{})}
 	s.known[key] = state
 	s.pending++
+	s.pendingByTenant[item.TenantHash]++
 	s.mu.Unlock()
 
 	data, err := json.Marshal(item)
@@ -112,6 +136,7 @@ func (s *Spool) Enqueue(ctx context.Context, item queue.Item) (queue.EnqueueResu
 	if err != nil {
 		delete(s.known, key)
 		s.pending--
+		s.pendingByTenant[item.TenantHash]--
 	}
 	close(state.done)
 	s.mu.Unlock()
@@ -132,17 +157,9 @@ func (s *Spool) Claim(_ context.Context, now time.Time) (*Lease, error) {
 			continue
 		}
 		key := strings.TrimSuffix(entry.Name(), fileSuffix)
-		data, err := os.ReadFile(s.path("ready", key))
-		if err != nil {
-			return nil, fmt.Errorf("read queued trace: %w", err)
-		}
-		data, err = s.codec.open(data)
+		item, err := s.readItem(s.path("ready", key))
 		if err != nil {
 			return nil, fmt.Errorf("open queued trace %s: %w", key, err)
-		}
-		var item queue.Item
-		if err := json.Unmarshal(data, &item); err != nil {
-			return nil, fmt.Errorf("decode queued trace %s: %w", key, err)
 		}
 		if item.NextAttemptAt.After(now) {
 			continue
@@ -180,6 +197,9 @@ func (s *Spool) Ack(lease *Lease, now time.Time) error {
 	}
 	if s.pending > 0 {
 		s.pending--
+	}
+	if s.pendingByTenant[lease.Item.TenantHash] > 0 {
+		s.pendingByTenant[lease.Item.TenantHash]--
 	}
 	return nil
 }
@@ -223,6 +243,9 @@ func (s *Spool) DeadLetter(lease *Lease, reason string, now time.Time) error {
 	if s.pending > 0 {
 		s.pending--
 	}
+	if s.pendingByTenant[lease.Item.TenantHash] > 0 {
+		s.pendingByTenant[lease.Item.TenantHash]--
+	}
 	return nil
 }
 
@@ -256,15 +279,7 @@ func (s *Spool) recover() error {
 		}
 	}
 
-	readyCount, err := countJSONFiles(s.directory("ready"))
-	if err != nil {
-		return err
-	}
-	processingCount, err := countJSONFiles(s.directory("processing"))
-	if err != nil {
-		return err
-	}
-	s.pending = readyCount + processingCount
+	s.pending = 0
 	for _, state := range []string{"ready", "processing", "receipts", "dead"} {
 		entries, err := os.ReadDir(s.directory(state))
 		if err != nil {
@@ -272,6 +287,14 @@ func (s *Spool) recover() error {
 		}
 		for _, entry := range entries {
 			if !entry.IsDir() && strings.HasSuffix(entry.Name(), fileSuffix) {
+				if state == "ready" || state == "processing" {
+					item, err := s.readItem(filepath.Join(s.directory(state), entry.Name()))
+					if err != nil {
+						return fmt.Errorf("rebuild tenant queue counts from %s: %w", entry.Name(), err)
+					}
+					s.pending++
+					s.pendingByTenant[item.TenantHash]++
+				}
 				done := make(chan struct{})
 				close(done)
 				s.known[strings.TrimSuffix(entry.Name(), fileSuffix)] = &enqueueState{done: done}
@@ -323,18 +346,28 @@ func itemKey(item queue.Item) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func countJSONFiles(directory string) (int, error) {
-	entries, err := os.ReadDir(directory)
+func credentialHash(authorization, apiKey string) string {
+	sum := sha256.Sum256([]byte(authorization + "\x00" + apiKey))
+	return hex.EncodeToString(sum[:])
+}
+
+func (s *Spool) readItem(path string) (queue.Item, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return 0, fmt.Errorf("list spool directory: %w", err)
+		return queue.Item{}, err
 	}
-	count := 0
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), fileSuffix) {
-			count++
-		}
+	data, err = s.codec.open(data)
+	if err != nil {
+		return queue.Item{}, err
 	}
-	return count, nil
+	var item queue.Item
+	if err := json.Unmarshal(data, &item); err != nil {
+		return queue.Item{}, err
+	}
+	if item.TenantHash == "" {
+		item.TenantHash = credentialHash(item.Authorization, item.APIKey)
+	}
+	return item, nil
 }
 
 func fileExists(path string) bool {

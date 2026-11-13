@@ -23,6 +23,7 @@ type Registry struct {
 	accepted       atomic.Uint64
 	duplicates     atomic.Uint64
 	overload       atomic.Uint64
+	tenantOverload atomic.Uint64
 	invalid        atomic.Uint64
 	delivered      atomic.Uint64
 	retried        atomic.Uint64
@@ -42,6 +43,8 @@ func (r *Registry) Ingress(result string, duration time.Duration) {
 		r.duplicates.Add(1)
 	case "overload":
 		r.overload.Add(1)
+	case "tenant_overload":
+		r.tenantOverload.Add(1)
 	default:
 		r.invalid.Add(1)
 	}
@@ -73,6 +76,7 @@ func (r *Registry) Handler(pending func() int) http.Handler {
 		writeCounter(w, "sentinel_ingest_requests_total", "accepted", r.accepted.Load())
 		writeCounter(w, "sentinel_ingest_requests_total", "duplicate", r.duplicates.Load())
 		writeCounter(w, "sentinel_ingest_requests_total", "overload", r.overload.Load())
+		writeCounter(w, "sentinel_ingest_requests_total", "tenant_overload", r.tenantOverload.Load())
 		writeCounter(w, "sentinel_ingest_requests_total", "invalid", r.invalid.Load())
 		_, _ = fmt.Fprintln(w, "# HELP sentinel_ingest_queue_pending Traces waiting or in flight.")
 		_, _ = fmt.Fprintln(w, "# TYPE sentinel_ingest_queue_pending gauge")

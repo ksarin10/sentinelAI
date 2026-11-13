@@ -81,6 +81,43 @@ func TestCapacityRejectsWithoutDroppingAcceptedWork(t *testing.T) {
 	}
 }
 
+func TestPerTenantCapacityPreventsNoisyNeighbor(t *testing.T) {
+	store, err := OpenWithLimits(t.TempDir(), 3, 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	_, err = store.Enqueue(ctx, queue.Item{ID: "tenant-a-1", APIKey: "tenant-a", Body: []byte(`{}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = store.Enqueue(ctx, queue.Item{ID: "tenant-a-2", APIKey: "tenant-a", Body: []byte(`{}`)})
+	if !errors.Is(err, queue.ErrTenantFull) {
+		t.Fatalf("same tenant error = %v, want ErrTenantFull", err)
+	}
+	if _, err := store.Enqueue(ctx, queue.Item{ID: "tenant-b-1", APIKey: "tenant-b", Body: []byte(`{}`)}); err != nil {
+		t.Fatalf("second tenant should retain capacity: %v", err)
+	}
+}
+
+func TestPerTenantCapacityRebuildsAfterRestart(t *testing.T) {
+	root := t.TempDir()
+	store, err := OpenWithLimits(root, 3, 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = store.Enqueue(context.Background(), queue.Item{ID: "tenant-a-1", APIKey: "tenant-a", Body: []byte(`{}`)})
+
+	restarted, err := OpenWithLimits(root, 3, 1, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = restarted.Enqueue(context.Background(), queue.Item{ID: "tenant-a-2", APIKey: "tenant-a", Body: []byte(`{}`)})
+	if !errors.Is(err, queue.ErrTenantFull) {
+		t.Fatalf("error after restart = %v, want ErrTenantFull", err)
+	}
+}
+
 func TestRetryPersistsAttemptAndDelay(t *testing.T) {
 	spool := openTestSpool(t, t.TempDir(), 10)
 	_, _ = spool.Enqueue(context.Background(), queue.Item{ID: "trace-42", APIKey: "key", Body: []byte(`{}`)})

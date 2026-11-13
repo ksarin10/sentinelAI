@@ -25,7 +25,13 @@ func main() {
 		logger.Error("INGEST_SPOOL_SECRET must be set to at least 32 characters")
 		os.Exit(1)
 	}
-	store, err := spool.OpenEncrypted(env("INGEST_SPOOL_DIR", "/var/lib/sentinelai-ingest"), envInt("INGEST_MAX_PENDING", 100_000), spoolSecret)
+	maxPending := envInt("INGEST_MAX_PENDING", 100_000)
+	store, err := spool.OpenWithLimits(
+		env("INGEST_SPOOL_DIR", "/var/lib/sentinelai-ingest"),
+		maxPending,
+		envInt("INGEST_MAX_PENDING_PER_KEY", min(10_000, maxPending)),
+		spoolSecret,
+	)
 	if err != nil {
 		logger.Error("open durable spool", "error", err)
 		os.Exit(1)
