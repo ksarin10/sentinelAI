@@ -11,29 +11,58 @@ const dto = {
   latencyMs: 125
 };
 
-let createCalls = 0;
 const traces = {
   findByExternalId: async () => ({
     id: "trace-existing",
     evaluations: [{ id: "evaluation-existing" }]
-  }),
-  create: async () => {
-    createCalls += 1;
-    throw new Error("create should not run for a duplicate");
-  }
+  })
 };
 
 async function main() {
-  const service = new IngestService({} as any, traces as any, {} as any);
+  let repairedOutbox = false;
+  const transaction = {
+    evaluation: {
+      findFirst: async () => ({ id: "evaluation-existing", traceId: "trace-existing", status: "QUEUED", dispatch: null }),
+      create: async () => {
+        throw new Error("evaluation already exists");
+      }
+    },
+    evaluationDispatch: {
+      create: async () => {
+        repairedOutbox = true;
+        return {};
+      }
+    }
+  };
+  const prisma = {
+    $transaction: async (callback: (client: typeof transaction) => unknown) => callback(transaction),
+    evaluationDispatch: {
+      findUnique: async () => ({
+        status: "PENDING",
+        evaluation: { id: "evaluation-existing", traceId: "trace-existing", status: "QUEUED" }
+      }),
+      updateMany: async () => ({ count: 1 })
+    }
+  };
+  let queuedJobs = 0;
+  const queue = {
+    add: async () => {
+      queuedJobs += 1;
+      return {};
+    }
+  };
+  const service = new IngestService(prisma as any, traces as any, queue as any);
   const result = await service.ingest(project, dto);
 
   assert.deepEqual(result, {
     traceId: "trace-existing",
     evaluationId: "evaluation-existing",
-    queued: false,
+    queued: true,
+    dispatched: true,
     duplicate: true
   });
-  assert.equal(createCalls, 0);
+  assert.equal(repairedOutbox, true);
+  assert.equal(queuedJobs, 1);
 }
 
 void main();

@@ -5,7 +5,7 @@ import { Queue } from "bullmq";
 import { randomUUID } from "crypto";
 import { createApiKey } from "../common/crypto";
 import { seedOptimizationDemo } from "../demo/seed-optimization-demo";
-import { queueTraceEvaluation } from "../evaluations/evaluation-jobs";
+import { tryDispatchEvaluation } from "../evaluations/evaluation-jobs";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateApiKeyDto, CreateProjectDto } from "./dto";
 import { ProjectsRepository } from "./projects.repository";
@@ -97,8 +97,9 @@ export class ProjectsService {
     const scenario = scenarios[Math.floor(Math.random() * scenarios.length)];
     const promptTokens = 140 + Math.floor(Math.random() * 80);
     const completionTokens = 110 + Math.floor(Math.random() * 120);
-    const trace = await this.prisma.trace.create({
-      data: {
+    const created = await this.prisma.$transaction(async (transaction) => {
+      const trace = await transaction.trace.create({
+        data: {
         projectId,
         externalId: `demo-${randomUUID()}`,
         name: scenario.name,
@@ -115,10 +116,20 @@ export class ProjectsService {
         metadata: scenario.metadata as Prisma.InputJsonValue,
         startedAt,
         endedAt
-      }
+        }
+      });
+      const evaluation = await transaction.evaluation.create({
+        data: { traceId: trace.id, status: "QUEUED", dispatch: { create: {} } }
+      });
+      return { trace, evaluation };
     });
-    const { evaluation, job } = await queueTraceEvaluation(this.prisma, this.evaluationsQueue, trace.id);
-    return { trace, evaluationId: evaluation.id, evaluationJobId: String(job.id), queued: true };
+    const dispatched = await tryDispatchEvaluation(this.prisma, this.evaluationsQueue, created.evaluation.id);
+    return {
+      trace: created.trace,
+      evaluationId: created.evaluation.id,
+      queued: true,
+      dispatched
+    };
   }
 
   async seedDemoAnalytics(ownerId: string, projectId: string) {

@@ -3,7 +3,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProjectsService } from "../projects/projects.service";
-import { queueTraceEvaluation } from "./evaluation-jobs";
+import { scheduleTraceEvaluation } from "./evaluation-jobs";
 
 @Injectable()
 export class EvaluationsService {
@@ -19,7 +19,7 @@ export class EvaluationsService {
     if (!trace) {
       throw new NotFoundException("Trace not found");
     }
-    const { evaluation } = await queueTraceEvaluation(this.prisma, this.evaluationsQueue, traceId);
+    const { evaluation } = await scheduleTraceEvaluation(this.prisma, this.evaluationsQueue, traceId);
     return evaluation;
   }
 

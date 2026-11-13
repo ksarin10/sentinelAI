@@ -100,6 +100,7 @@ export * from "./recommendations/candidate-selection";
 export * from "./recommendations/capability-match";
 export * from "./provider-credential-crypto";
 export * from "./eval-judge";
+export * from "./evaluation-job";
 export * from "./shadow-experiment";
 export * from "./shadow/provider-replay-support";
 export * from "./shadow/shadow-economics";
