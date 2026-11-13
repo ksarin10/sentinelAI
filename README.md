@@ -24,7 +24,7 @@ Pass rate is `passed / (passed + borderline + failed)`. Borderline replays count
 
 ## Engineering highlights
 
-- Go ingestion gateway with an fsync-backed spool, bounded overload behavior, retry backoff, and dead letters
+- Go ingestion gateway with an AES-GCM-encrypted, fsync-backed spool, per-key capacity isolation, retry backoff, and dead letters
 - TypeScript monorepo with separate API, worker, web, SDK, and shared-domain packages
 - Asynchronous evaluation and replay jobs backed by Redis and BullMQ
 - PostgreSQL persistence with Prisma migrations
@@ -126,8 +126,10 @@ Recreate containers after changing `.env` (rebuild `web` when `NEXT_PUBLIC_*` ch
 | `OPENAI_API_KEY` | Live replay and optional LLM judge (Settings or env) |
 | `PROVIDER_CREDENTIALS_SECRET` | Encrypts per-project provider keys (defaults to `JWT_SECRET`) |
 | `INGEST_MAX_PENDING` | Hard limit for queued and in-flight traces (default `100000`) |
+| `INGEST_MAX_PENDING_PER_KEY` | Per-API-key limit that prevents one client from filling the shared queue (default `10000`) |
 | `INGEST_WORKERS` | Concurrent upstream delivery workers (default `8`) |
 | `INGEST_MAX_ATTEMPTS` | Retry budget before a trace enters the dead-letter directory (default `12`) |
+| `INGEST_SPOOL_SECRET` | Secret of at least 32 characters used to encrypt queued payloads and credentials |
 
 ## Durable ingestion
 
@@ -141,9 +143,9 @@ const sentinel = new SentinelAI({
 });
 ```
 
-The gateway requires an idempotency key, writes the trace to an fsync-backed spool, and only then returns `202 Accepted`. Delivery to the NestJS API is at least once. A project-scoped database constraint makes the sink idempotent, including concurrent retries. When the spool reaches its configured limit, the gateway returns `503` with `Retry-After: 1`; it does not accept and discard the trace.
+The gateway requires an idempotency key, encrypts the trace with AES-GCM, writes it to an fsync-backed spool, and only then returns `202 Accepted`. Delivery to the NestJS API is at least once. A project-scoped database constraint makes the sink idempotent, including concurrent retries. When the whole spool reaches its configured limit, the gateway returns `503`; when one API key reaches its share, it returns `429`. Both include `Retry-After: 1` and neither accepts then discards the trace.
 
-Transient network errors, `408`, `429`, and `5xx` responses retry with capped exponential backoff and jitter. Permanent `4xx` responses and exhausted retries are retained under the spool's `dead/` directory for inspection. On startup, work found under `processing/` returns to the ready queue unless a durable receipt proves it already completed.
+Transient network errors, `408`, `429`, and `5xx` responses retry with capped exponential backoff and jitter. Permanent `4xx` responses and exhausted retries are retained as encrypted dead letters. On startup, work found under `processing/` returns to the ready queue unless a durable receipt proves it already completed.
 
 See [the reliability and benchmark report](docs/ingestion-reliability.md) for the failure matrix, reproducible load test, p50/p95/p99 results, and CPU-profile-driven optimization.
 
