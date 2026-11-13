@@ -84,6 +84,34 @@ async function main() {
   assert.equal(capturedURL, "http://localhost:4100/v1/traces");
   assert.equal(capturedHeaders.get("idempotency-key"), "checkout-42");
   assert.equal(capturedHeaders.get("x-sentinel-source"), "checkout-api");
+
+  const telemetryErrors: Array<{ error: unknown; status: string }> = [];
+  globalThis.fetch = (async () => new Response("unavailable", { status: 503 })) as typeof fetch;
+  try {
+    const bestEffort = new SentinelAI({
+      apiKey: "sai_test",
+      onTelemetryError: (error, context) => telemetryErrors.push({ error, status: context.applicationStatus })
+    });
+    assert.equal(await bestEffort.observe("successful.operation", async () => "application result"), "application result");
+    assert.equal(telemetryErrors.length, 1);
+    assert.equal(telemetryErrors[0].status, "SUCCESS");
+
+    const strict = new SentinelAI({ apiKey: "sai_test", telemetryFailurePolicy: "strict" });
+    await assert.rejects(() => strict.observe("strict.operation", async () => "application result"), /ingestion failed: 503/);
+
+    const applicationError = new Error("application failed");
+    let observedError: unknown;
+    try {
+      await strict.observe("failed.operation", async () => {
+        throw applicationError;
+      });
+    } catch (error) {
+      observedError = error;
+    }
+    assert.equal(observedError, applicationError, "telemetry failure must not mask the original application error");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 }
 
 void main();

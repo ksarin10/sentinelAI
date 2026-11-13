@@ -5,6 +5,8 @@ export type SentinelAIClientOptions = {
   baseUrl?: string;
   durableIngestionUrl?: string;
   sourceApp?: string;
+  telemetryFailurePolicy?: "best-effort" | "strict";
+  onTelemetryError?: (error: unknown, context: { name: string; applicationStatus: "SUCCESS" | "ERROR" }) => void;
 };
 
 export type DurableIngestTraceResponse = {
@@ -41,12 +43,16 @@ export class SentinelAI {
   private readonly baseUrl: string;
   private readonly durableIngestionUrl?: string;
   private readonly sourceApp?: string;
+  private readonly telemetryFailurePolicy: "best-effort" | "strict";
+  private readonly onTelemetryError?: SentinelAIClientOptions["onTelemetryError"];
 
   constructor(options: SentinelAIClientOptions) {
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl ?? "http://localhost:4000/api";
     this.durableIngestionUrl = options.durableIngestionUrl?.replace(/\/$/, "");
     this.sourceApp = options.sourceApp;
+    this.telemetryFailurePolicy = options.telemetryFailurePolicy ?? "best-effort";
+    this.onTelemetryError = options.onTelemetryError;
   }
 
   async trace(payload: SentinelAITraceRequest): Promise<IngestTraceResponse | DurableIngestTraceResponse> {
@@ -73,8 +79,32 @@ export class SentinelAI {
 
   async observe<T>(name: string, run: () => Promise<T>, options?: SentinelAIObserveOptions) {
     const started = Date.now();
+    let result: T;
     try {
-      const result = await run();
+      result = await run();
+    } catch (applicationError) {
+      try {
+        await this.trace({
+          name,
+          prompt: options?.prompt ?? name,
+          response: applicationError instanceof Error ? applicationError.message : "Unknown error",
+          latencyMs: Date.now() - started,
+          startedAt: new Date(started).toISOString(),
+          endedAt: new Date().toISOString(),
+          status: "ERROR",
+          provider: options?.provider ?? "custom",
+          model: options?.model ?? "unknown",
+          metadata: options?.metadata,
+          task: options?.task,
+          experiment: options?.experiment
+        });
+      } catch (telemetryError) {
+        this.reportTelemetryError(telemetryError, name, "ERROR");
+      }
+      throw applicationError;
+    }
+
+    try {
       await this.trace({
         name,
         prompt: options?.prompt ?? name,
@@ -91,23 +121,20 @@ export class SentinelAI {
         task: options?.task,
         experiment: options?.experiment
       });
-      return result;
-    } catch (error) {
-      await this.trace({
-        name,
-        prompt: options?.prompt ?? name,
-        response: error instanceof Error ? error.message : "Unknown error",
-        latencyMs: Date.now() - started,
-        startedAt: new Date(started).toISOString(),
-        endedAt: new Date().toISOString(),
-        status: "ERROR",
-        provider: options?.provider ?? "custom",
-        model: options?.model ?? "unknown",
-        metadata: options?.metadata,
-        task: options?.task,
-        experiment: options?.experiment
-      });
-      throw error;
+    } catch (telemetryError) {
+      this.reportTelemetryError(telemetryError, name, "SUCCESS");
+      if (this.telemetryFailurePolicy === "strict") {
+        throw telemetryError;
+      }
+    }
+    return result;
+  }
+
+  private reportTelemetryError(error: unknown, name: string, applicationStatus: "SUCCESS" | "ERROR") {
+    try {
+      this.onTelemetryError?.(error, { name, applicationStatus });
+    } catch {
+      // Error reporting must never replace the application result or error.
     }
   }
 }
