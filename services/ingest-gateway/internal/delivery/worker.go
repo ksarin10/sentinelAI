@@ -32,6 +32,8 @@ type Config struct {
 	PollEvery   time.Duration
 	BaseBackoff time.Duration
 	MaxBackoff  time.Duration
+	Clock       func() time.Time
+	RetryDelay  func(int) time.Duration
 }
 
 type Worker struct {
@@ -47,6 +49,12 @@ type Worker struct {
 func New(store Store, client *http.Client, config Config, logger *slog.Logger, registry *metrics.Registry) *Worker {
 	worker := &Worker{store: store, client: client, config: config, logger: logger, metrics: registry, now: time.Now}
 	worker.backoff = worker.exponentialBackoff
+	if config.Clock != nil {
+		worker.now = config.Clock
+	}
+	if config.RetryDelay != nil {
+		worker.backoff = config.RetryDelay
+	}
 	return worker
 }
 
