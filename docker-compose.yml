@@ -63,6 +63,7 @@ services:
       INGEST_ADMIN_ADDR: :4101
       INGEST_UPSTREAM_URL: http://api:4000
       INGEST_SPOOL_DIR: /var/lib/sentinelai-ingest
+      INGEST_SPOOL_SECRET: ${INGEST_SPOOL_SECRET:-local-development-only-change-this-secret}
       INGEST_MAX_PENDING: ${INGEST_MAX_PENDING:-100000}
       INGEST_WORKERS: ${INGEST_WORKERS:-8}
       INGEST_MAX_ATTEMPTS: ${INGEST_MAX_ATTEMPTS:-12}

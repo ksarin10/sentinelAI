@@ -20,7 +20,12 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	store, err := spool.Open(env("INGEST_SPOOL_DIR", "/var/lib/sentinelai-ingest"), envInt("INGEST_MAX_PENDING", 100_000))
+	spoolSecret := os.Getenv("INGEST_SPOOL_SECRET")
+	if len(spoolSecret) < 32 {
+		logger.Error("INGEST_SPOOL_SECRET must be set to at least 32 characters")
+		os.Exit(1)
+	}
+	store, err := spool.OpenEncrypted(env("INGEST_SPOOL_DIR", "/var/lib/sentinelai-ingest"), envInt("INGEST_MAX_PENDING", 100_000), spoolSecret)
 	if err != nil {
 		logger.Error("open durable spool", "error", err)
 		os.Exit(1)

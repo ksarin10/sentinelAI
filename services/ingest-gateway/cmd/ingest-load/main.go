@@ -50,7 +50,7 @@ func main() {
 	directory, err := os.MkdirTemp("", "sentinelai-ingest-load-*")
 	check(err)
 	defer os.RemoveAll(directory)
-	store, err := spool.Open(directory, *requests+1)
+	store, err := spool.OpenEncrypted(directory, *requests+1, "load-test-secret-with-at-least-32-characters")
 	check(err)
 	server := httptest.NewServer(httpapi.New(store, metrics.New()).Handler())
 	defer server.Close()
@@ -114,7 +114,7 @@ func main() {
 		Errors:            failures.Load(),
 		PendingAfterRun:   store.Pending(),
 		PayloadBytes:      len(payload),
-		Durability:        "file fsync + atomic rename before HTTP 202",
+		Durability:        "AES-GCM + file fsync + atomic rename before HTTP 202",
 		OperatingSystem:   runtime.GOOS,
 		Architecture:      runtime.GOARCH,
 		LogicalProcessors: runtime.NumCPU(),

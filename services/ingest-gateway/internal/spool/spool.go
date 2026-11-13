@@ -27,6 +27,7 @@ type Spool struct {
 	mu         sync.Mutex
 	pending    int
 	known      map[string]*enqueueState
+	codec      *codec
 }
 
 type enqueueState struct {
@@ -51,8 +52,16 @@ type deadLetter struct {
 }
 
 func Open(root string, maxPending int) (*Spool, error) {
+	return OpenEncrypted(root, maxPending, "")
+}
+
+func OpenEncrypted(root string, maxPending int, secret string) (*Spool, error) {
 	if maxPending < 1 {
 		return nil, fmt.Errorf("max pending must be positive")
+	}
+	recordCodec, err := newCodec(secret)
+	if err != nil {
+		return nil, err
 	}
 	for _, directory := range []string{"ready", "processing", "receipts", "dead", "tmp"} {
 		if err := os.MkdirAll(filepath.Join(root, directory), 0o750); err != nil {
@@ -60,7 +69,7 @@ func Open(root string, maxPending int) (*Spool, error) {
 		}
 	}
 
-	s := &Spool{root: root, maxPending: maxPending, known: make(map[string]*enqueueState)}
+	s := &Spool{root: root, maxPending: maxPending, known: make(map[string]*enqueueState), codec: recordCodec}
 	if err := s.recover(); err != nil {
 		return nil, err
 	}
@@ -126,6 +135,10 @@ func (s *Spool) Claim(_ context.Context, now time.Time) (*Lease, error) {
 		data, err := os.ReadFile(s.path("ready", key))
 		if err != nil {
 			return nil, fmt.Errorf("read queued trace: %w", err)
+		}
+		data, err = s.codec.open(data)
+		if err != nil {
+			return nil, fmt.Errorf("open queued trace %s: %w", key, err)
 		}
 		var item queue.Item
 		if err := json.Unmarshal(data, &item); err != nil {
@@ -269,6 +282,10 @@ func (s *Spool) recover() error {
 }
 
 func (s *Spool) atomicWrite(state, key string, data []byte) error {
+	sealed, err := s.codec.seal(data)
+	if err != nil {
+		return err
+	}
 	temporary, err := os.CreateTemp(s.directory("tmp"), key+"-*")
 	if err != nil {
 		return fmt.Errorf("create spool temp file: %w", err)
@@ -276,7 +293,7 @@ func (s *Spool) atomicWrite(state, key string, data []byte) error {
 	temporaryName := temporary.Name()
 	defer os.Remove(temporaryName)
 
-	if _, err := temporary.Write(data); err != nil {
+	if _, err := temporary.Write(sealed); err != nil {
 		_ = temporary.Close()
 		return fmt.Errorf("write spool file: %w", err)
 	}
