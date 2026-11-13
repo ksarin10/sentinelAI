@@ -1,4 +1,9 @@
-import type { IngestTraceRequest, IngestTraceResponse, ModelExperimentMetadata, TaskTraceMetadata } from "@sentinelai/shared";
+import type {
+  IngestTraceRequest,
+  IngestTraceResponse,
+  ModelExperimentMetadata,
+  TaskTraceMetadata,
+} from "@sentinelai/shared";
 
 export type SentinelAIClientOptions = {
   apiKey: string;
@@ -6,7 +11,10 @@ export type SentinelAIClientOptions = {
   durableIngestionUrl?: string;
   sourceApp?: string;
   telemetryFailurePolicy?: "best-effort" | "strict";
-  onTelemetryError?: (error: unknown, context: { name: string; applicationStatus: "SUCCESS" | "ERROR" }) => void;
+  onTelemetryError?: (
+    error: unknown,
+    context: { name: string; applicationStatus: "SUCCESS" | "ERROR" },
+  ) => void;
 };
 
 export type DurableIngestTraceResponse = {
@@ -20,21 +28,27 @@ export type SentinelAITraceRequest = IngestTraceRequest & {
   experiment?: ModelExperimentMetadata;
 };
 
-export type SentinelAIObserveOptions = Omit<SentinelAITraceRequest, "name" | "latencyMs" | "prompt"> & {
+export type SentinelAIObserveOptions = Omit<
+  SentinelAITraceRequest,
+  "name" | "latencyMs" | "prompt"
+> & {
   prompt?: string;
 };
 
-export function normalizeTracePayload(payload: SentinelAITraceRequest): IngestTraceRequest {
+export function normalizeTracePayload(
+  payload: SentinelAITraceRequest,
+): IngestTraceRequest {
   const { task, experiment, metadata, ...trace } = payload;
   const enrichedMetadata = {
     ...metadata,
     ...(task ? { task } : {}),
-    ...(experiment ? { experiment } : {})
+    ...(experiment ? { experiment } : {}),
   };
 
   return {
     ...trace,
-    metadata: Object.keys(enrichedMetadata).length > 0 ? enrichedMetadata : undefined
+    metadata:
+      Object.keys(enrichedMetadata).length > 0 ? enrichedMetadata : undefined,
   };
 }
 
@@ -51,33 +65,55 @@ export class SentinelAI {
     this.baseUrl = options.baseUrl ?? "http://localhost:4000/api";
     this.durableIngestionUrl = options.durableIngestionUrl?.replace(/\/$/, "");
     this.sourceApp = options.sourceApp;
-    this.telemetryFailurePolicy = options.telemetryFailurePolicy ?? "best-effort";
+    this.telemetryFailurePolicy =
+      options.telemetryFailurePolicy ?? "best-effort";
     this.onTelemetryError = options.onTelemetryError;
   }
 
-  async trace(payload: SentinelAITraceRequest): Promise<IngestTraceResponse | DurableIngestTraceResponse> {
+  async trace(
+    payload: SentinelAITraceRequest,
+  ): Promise<IngestTraceResponse | DurableIngestTraceResponse> {
     const durable = Boolean(this.durableIngestionUrl);
     const idempotencyKey = payload.externalId ?? globalThis.crypto.randomUUID();
-    const response = await fetch(durable ? `${this.durableIngestionUrl}/v1/traces` : `${this.baseUrl}/ingest/traces`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-sentinel-api-key": this.apiKey,
-        ...(durable ? { "idempotency-key": idempotencyKey } : {}),
-        ...(durable && this.sourceApp ? { "x-sentinel-source": this.sourceApp } : {})
+    const normalizedPayload = normalizeTracePayload(payload);
+    const response = await fetch(
+      durable
+        ? `${this.durableIngestionUrl}/v1/traces`
+        : `${this.baseUrl}/ingest/traces`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-sentinel-api-key": this.apiKey,
+          ...(durable ? { "idempotency-key": idempotencyKey } : {}),
+          ...(durable && this.sourceApp
+            ? { "x-sentinel-source": this.sourceApp }
+            : {}),
+        },
+        body: JSON.stringify({
+          ...normalizedPayload,
+          externalId: idempotencyKey,
+        }),
       },
-      body: JSON.stringify(normalizeTracePayload(payload))
-    });
+    );
 
     if (!response.ok) {
       const message = await response.text();
-      throw new Error(`SentinelAI ingestion failed: ${response.status} ${message}`);
+      throw new Error(
+        `SentinelAI ingestion failed: ${response.status} ${message}`,
+      );
     }
 
-    return response.json() as Promise<IngestTraceResponse | DurableIngestTraceResponse>;
+    return response.json() as Promise<
+      IngestTraceResponse | DurableIngestTraceResponse
+    >;
   }
 
-  async observe<T>(name: string, run: () => Promise<T>, options?: SentinelAIObserveOptions) {
+  async observe<T>(
+    name: string,
+    run: () => Promise<T>,
+    options?: SentinelAIObserveOptions,
+  ) {
     const started = Date.now();
     let result: T;
     try {
@@ -87,7 +123,10 @@ export class SentinelAI {
         await this.trace({
           name,
           prompt: options?.prompt ?? name,
-          response: applicationError instanceof Error ? applicationError.message : "Unknown error",
+          response:
+            applicationError instanceof Error
+              ? applicationError.message
+              : "Unknown error",
           latencyMs: Date.now() - started,
           startedAt: new Date(started).toISOString(),
           endedAt: new Date().toISOString(),
@@ -96,7 +135,7 @@ export class SentinelAI {
           model: options?.model ?? "unknown",
           metadata: options?.metadata,
           task: options?.task,
-          experiment: options?.experiment
+          experiment: options?.experiment,
         });
       } catch (telemetryError) {
         this.reportTelemetryError(telemetryError, name, "ERROR");
@@ -119,7 +158,7 @@ export class SentinelAI {
         costUsd: options?.costUsd,
         metadata: options?.metadata,
         task: options?.task,
-        experiment: options?.experiment
+        experiment: options?.experiment,
       });
     } catch (telemetryError) {
       this.reportTelemetryError(telemetryError, name, "SUCCESS");
@@ -130,7 +169,11 @@ export class SentinelAI {
     return result;
   }
 
-  private reportTelemetryError(error: unknown, name: string, applicationStatus: "SUCCESS" | "ERROR") {
+  private reportTelemetryError(
+    error: unknown,
+    name: string,
+    applicationStatus: "SUCCESS" | "ERROR",
+  ) {
     try {
       this.onTelemetryError?.(error, { name, applicationStatus });
     } catch {
