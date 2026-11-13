@@ -54,6 +54,29 @@ services:
       redis:
         condition: service_healthy
 
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile.ingest
+    environment:
+      INGEST_ADDR: :4100
+      INGEST_ADMIN_ADDR: :4101
+      INGEST_UPSTREAM_URL: http://api:4000
+      INGEST_SPOOL_DIR: /var/lib/sentinelai-ingest
+      INGEST_SPOOL_SECRET: ${INGEST_SPOOL_SECRET:-local-development-only-change-this-secret}
+      INGEST_MAX_PENDING: ${INGEST_MAX_PENDING:-100000}
+      INGEST_MAX_PENDING_PER_KEY: ${INGEST_MAX_PENDING_PER_KEY:-10000}
+      INGEST_WORKERS: ${INGEST_WORKERS:-8}
+      INGEST_MAX_ATTEMPTS: ${INGEST_MAX_ATTEMPTS:-12}
+    ports:
+      - "4100:4100"
+      - "127.0.0.1:4101:4101"
+    volumes:
+      - ingest-spool:/var/lib/sentinelai-ingest
+    depends_on:
+      - api
+    restart: unless-stopped
+
   worker:
     build:
       context: .
@@ -91,3 +114,4 @@ services:
 
 volumes:
   postgres-data:
+  ingest-spool:

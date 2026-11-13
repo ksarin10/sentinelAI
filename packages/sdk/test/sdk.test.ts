@@ -54,6 +54,36 @@ async function main() {
       experiment: { variant: "baseline" }
     }
   });
+
+  let capturedURL = "";
+  let capturedHeaders = new Headers();
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    capturedURL = String(url);
+    capturedHeaders = new Headers(init?.headers);
+    return new Response(JSON.stringify({ idempotencyKey: "checkout-42", accepted: true, duplicate: false }), { status: 202 });
+  }) as typeof fetch;
+
+  try {
+    const durableClient = new SentinelAI({
+      apiKey: "sai_test",
+      durableIngestionUrl: "http://localhost:4100/",
+      sourceApp: "checkout-api"
+    });
+    await durableClient.trace({
+      externalId: "checkout-42",
+      name: "checkout.answer",
+      provider: "openai",
+      model: "gpt-4.1-mini",
+      prompt: "Where is my order?",
+      latencyMs: 85
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(capturedURL, "http://localhost:4100/v1/traces");
+  assert.equal(capturedHeaders.get("idempotency-key"), "checkout-42");
+  assert.equal(capturedHeaders.get("x-sentinel-source"), "checkout-api");
 }
 
 void main();

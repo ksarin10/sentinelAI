@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+output_dir="${1:-profiles}"
+mkdir -p "$output_dir"
+
+go test ./internal/spool \
+  -o "$output_dir/spool.test" \
+  -run '^$' \
+  -bench 'Benchmark(DurableEnqueue|DurableEnqueueParallel|DuplicateEnqueue)$' \
+  -benchmem \
+  -count 5 \
+  -cpuprofile "$output_dir/cpu.pprof" \
+  -memprofile "$output_dir/heap.pprof" \
+  | tee "$output_dir/benchmark.txt"
+
+echo "Profiles written to $output_dir"
