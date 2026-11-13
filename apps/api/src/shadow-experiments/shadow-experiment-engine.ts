@@ -2,7 +2,7 @@ import { TaskRiskLevel } from "@prisma/client";
 import {
   deriveSwitchRecommendationStatus,
   switchStatusLabel,
-  type SwitchRecommendationStatus
+  type SwitchRecommendationStatus,
 } from "@sentinelai/shared";
 import { RecommendationCandidate } from "../recommendations/recommendation-candidates";
 import { ModelCatalogDto } from "../model-catalog/model-catalog.dto";
@@ -21,6 +21,8 @@ export type PassedShadowExperiment = {
   averageCandidateHallucination: number | null;
   estimatedSavingsPercent: number | null;
   qualityThreshold: number;
+  verificationMethod: string;
+  evidenceQuality: string;
 };
 
 export type ModelRecommendation = {
@@ -52,7 +54,10 @@ export type ModelRecommendation = {
   };
 };
 
-function recommendationConfidence(passedRuns: number, riskLevel: TaskRiskLevel): ModelRecommendation["confidence"] {
+function recommendationConfidence(
+  passedRuns: number,
+  riskLevel: TaskRiskLevel,
+): ModelRecommendation["confidence"] {
   if (passedRuns >= 20 && riskLevel === "LOW") {
     return "HIGH";
   }
@@ -62,17 +67,33 @@ function recommendationConfidence(passedRuns: number, riskLevel: TaskRiskLevel):
   return "LOW";
 }
 
-function experimentKey(experiment: Pick<PassedShadowExperiment, "taskName" | "baselineProvider" | "baselineModel" | "candidateProvider" | "candidateModel">) {
+function experimentKey(
+  experiment: Pick<
+    PassedShadowExperiment,
+    | "taskName"
+    | "baselineProvider"
+    | "baselineModel"
+    | "candidateProvider"
+    | "candidateModel"
+  >,
+) {
   return `${experiment.taskName}:${experiment.baselineProvider}:${experiment.baselineModel}:${experiment.candidateProvider}:${experiment.candidateModel}`;
 }
 
 export function buildVerifiedRecommendations(
   candidates: RecommendationCandidate[],
   passedExperiments: PassedShadowExperiment[],
-  catalog: ModelCatalogDto[]
+  catalog: ModelCatalogDto[],
 ) {
-  const catalogByModel = new Map(catalog.map((entry) => [`${entry.provider}:${entry.model}`, entry]));
-  const passedByKey = new Map(passedExperiments.map((experiment) => [experimentKey(experiment), experiment]));
+  const catalogByModel = new Map(
+    catalog.map((entry) => [`${entry.provider}:${entry.model}`, entry]),
+  );
+  const passedByKey = new Map(
+    passedExperiments.map((experiment) => [
+      experimentKey(experiment),
+      experiment,
+    ]),
+  );
 
   return candidates.flatMap((candidate): ModelRecommendation[] => {
     const passed = passedByKey.get(
@@ -81,34 +102,47 @@ export function buildVerifiedRecommendations(
         baselineProvider: candidate.currentProvider,
         baselineModel: candidate.currentModel,
         candidateProvider: candidate.recommendedProvider,
-        candidateModel: candidate.recommendedModel
-      })
+        candidateModel: candidate.recommendedModel,
+      }),
     );
 
     if (!passed) {
       return [];
     }
 
-    const currentModel = catalogByModel.get(`${candidate.currentProvider}:${candidate.currentModel}`);
-    const recommendedModel = catalogByModel.get(`${candidate.recommendedProvider}:${candidate.recommendedModel}`);
+    if (
+      passed.evidenceQuality !== "JUDGED" ||
+      !["LIVE_REPLAY", "PRODUCTION_TRAFFIC"].includes(passed.verificationMethod)
+    ) {
+      return [];
+    }
+
+    const currentModel = catalogByModel.get(
+      `${candidate.currentProvider}:${candidate.currentModel}`,
+    );
+    const recommendedModel = catalogByModel.get(
+      `${candidate.recommendedProvider}:${candidate.recommendedModel}`,
+    );
     if (!currentModel || !recommendedModel) {
       return [];
     }
 
-    const savingsPercent = passed.estimatedSavingsPercent ?? candidate.estimatedSavingsPercent;
+    const savingsPercent =
+      passed.estimatedSavingsPercent ?? candidate.estimatedSavingsPercent;
     const switchStatus = deriveSwitchRecommendationStatus({
       passedRuns: passed.passedRuns,
       borderlineRuns: passed.borderlineRuns,
       failedRuns: passed.failedRuns,
       criticalFailures: passed.criticalFailures,
-      experimentStatus: "PASSED"
+      experimentStatus: "PASSED",
     });
 
     if (switchStatus === "DO_NOT_SWITCH") {
       return [];
     }
 
-    const totalRuns = passed.passedRuns + passed.borderlineRuns + passed.failedRuns;
+    const totalRuns =
+      passed.passedRuns + passed.borderlineRuns + passed.failedRuns;
 
     return [
       {
@@ -122,14 +156,17 @@ export function buildVerifiedRecommendations(
         switchStatus,
         switchStatusLabel: switchStatusLabel(switchStatus),
         passRate: totalRuns === 0 ? null : passed.passedRuns / totalRuns,
-        confidence: recommendationConfidence(passed.passedRuns, candidate.riskLevel),
+        confidence: recommendationConfidence(
+          passed.passedRuns,
+          candidate.riskLevel,
+        ),
         estimatedSavingsUsd: candidate.estimatedSavingsUsd,
         estimatedSavingsPercent: savingsPercent,
         rationale: [
           `${recommendedModel.displayName} was verified against recent ${candidate.taskName} traffic in the background.`,
           `Shadow-tested on your traffic before recommending this switch.`,
           `Shadow checks passed on ${passed.passedRuns} sampled calls while staying above your quality threshold.`,
-          `Estimated savings remain about ${savingsPercent}% versus ${currentModel.displayName}.`
+          `Estimated savings remain about ${savingsPercent}% versus ${currentModel.displayName}.`,
         ],
         signals: {
           traceCount: candidate.traceCount,
@@ -141,9 +178,9 @@ export function buildVerifiedRecommendations(
           qualityThreshold: candidate.qualityThreshold,
           riskLevel: candidate.riskLevel,
           optimizationGoal: candidate.optimizationGoal,
-          verifiedRuns: passed.passedRuns
-        }
-      }
+          verifiedRuns: passed.passedRuns,
+        },
+      },
     ];
   });
 }

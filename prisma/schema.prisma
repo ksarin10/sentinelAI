@@ -58,6 +58,20 @@ enum ShadowExperimentStatus {
   FAILED
 }
 
+enum VerificationMethod {
+  UNVERIFIED
+  SIMULATION
+  LIVE_REPLAY
+  PRODUCTION_TRAFFIC
+}
+
+enum EvidenceQuality {
+  NONE
+  DEMO
+  HEURISTIC
+  JUDGED
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -69,33 +83,33 @@ model User {
 }
 
 model Project {
-  id           String        @id @default(cuid())
-  name         String
-  slug         String
-  description  String?
-  ownerId      String
-  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  apiKeys      ApiKey[]
-  traces       Trace[]
-  taskProfiles         TaskProfile[]
-  shadowExperiments    ShadowExperiment[]
-  providerCredentials  ProjectProviderCredential[]
-  createdAt            DateTime                    @default(now())
-  updatedAt            DateTime                    @updatedAt
+  id                  String                      @id @default(cuid())
+  name                String
+  slug                String
+  description         String?
+  ownerId             String
+  owner               User                        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  apiKeys             ApiKey[]
+  traces              Trace[]
+  taskProfiles        TaskProfile[]
+  shadowExperiments   ShadowExperiment[]
+  providerCredentials ProjectProviderCredential[]
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
 
   @@unique([ownerId, slug])
   @@index([ownerId])
 }
 
 model ProjectProviderCredential {
-  id              String   @id @default(cuid())
-  projectId       String
-  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  provider        String
+  id               String   @id @default(cuid())
+  projectId        String
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider         String
   apiKeyCiphertext String
-  keyHint         String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  keyHint          String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([projectId, provider])
   @@index([projectId])
@@ -186,14 +200,14 @@ model Trace {
 }
 
 model Evaluation {
-  id        String            @id @default(cuid())
+  id        String              @id @default(cuid())
   traceId   String
-  trace     Trace             @relation(fields: [traceId], references: [id], onDelete: Cascade)
-  status    EvaluationStatus  @default(QUEUED)
+  trace     Trace               @relation(fields: [traceId], references: [id], onDelete: Cascade)
+  status    EvaluationStatus    @default(QUEUED)
   reason    String?
   scores    EvaluationScore[]
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
   dispatch  EvaluationDispatch?
 
   @@index([traceId])
@@ -237,6 +251,8 @@ model ShadowExperiment {
   candidateProvider             String
   candidateModel                String
   status                        ShadowExperimentStatus @default(QUEUED)
+  verificationMethod            VerificationMethod     @default(UNVERIFIED)
+  evidenceQuality               EvidenceQuality        @default(NONE)
   sampleSize                    Int                    @default(10)
   qualityThreshold              Float                  @default(0.8)
   passedRuns                    Int                    @default(0)
@@ -266,6 +282,7 @@ model ShadowExperimentRun {
   semanticScore      Float
   hallucinationScore Float
   passed             Boolean
+  evidenceQuality    EvidenceQuality  @default(NONE)
   createdAt          DateTime         @default(now())
 
   @@index([experimentId])

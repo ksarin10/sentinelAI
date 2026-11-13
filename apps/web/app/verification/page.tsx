@@ -20,7 +20,7 @@ import { cn } from "../../lib/utils";
 const verdictStyles: Record<ReplayVerdict, string> = {
   pass: "bg-primary/10 text-primary ring-primary/20",
   borderline: "bg-amber-50 text-amber-900 ring-amber-200/80",
-  fail: "bg-red-50 text-red-800 ring-red-200/80"
+  fail: "bg-red-50 text-red-800 ring-red-200/80",
 };
 
 function verdictLabel(verdict: ReplayVerdict) {
@@ -35,8 +35,14 @@ function VerificationContent() {
   const workspace = useProjectWorkspace();
   const [detail, setDetail] = useState<VerificationDetailRecord | null>(null);
 
-  const taskSummaries = buildTaskSummaries(workspace.taskModels, workspace.recommendations, workspace.verifications);
-  const activeTask = taskSummaries.find((task) => task.taskName === taskQuery) ?? taskSummaries[0];
+  const taskSummaries = buildTaskSummaries(
+    workspace.taskModels,
+    workspace.recommendations,
+    workspace.verifications,
+  );
+  const activeTask =
+    taskSummaries.find((task) => task.taskName === taskQuery) ??
+    taskSummaries[0];
   const verification = activeTask?.verification ?? null;
 
   useEffect(() => {
@@ -46,7 +52,7 @@ function VerificationContent() {
     }
     void apiRequest<VerificationDetailRecord>(
       `/projects/${workspace.projectId}/verifications/${verification.id}`,
-      { token: workspace.token }
+      { token: workspace.token },
     )
       .then(setDetail)
       .catch(() => setDetail(null));
@@ -57,7 +63,7 @@ function VerificationContent() {
       <PageHeader
         eyebrow="Verification"
         title="Replay evidence"
-        description="Each row is a production prompt shadow-replayed against the candidate model — with pass, borderline, or fail reasoning."
+        description="Review how each result was produced, the evidence quality, and whether it is eligible for a switch recommendation."
       >
         <WorkspaceToolbar
           projects={workspace.projects}
@@ -73,7 +79,10 @@ function VerificationContent() {
       </PageHeader>
 
       <VerificationProgress
-        phase={workspace.verificationPhase ?? (workspace.verificationBusy ? "running" : null)}
+        phase={
+          workspace.verificationPhase ??
+          (workspace.verificationBusy ? "running" : null)
+        }
         progress={workspace.verificationProgress}
         message={workspace.verificationMessage}
         taskName={workspace.verificationResultTask}
@@ -89,7 +98,7 @@ function VerificationContent() {
                 "rounded-full border px-4 py-1.5 text-sm font-medium transition",
                 task.taskName === activeTask?.taskName
                   ? "border-primary bg-primary/10 text-primary"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                  : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground",
               )}
             >
               {task.taskName}
@@ -101,20 +110,34 @@ function VerificationContent() {
       {!activeTask ? (
         <AlertBanner>
           Need more traces.{" "}
-          <Link href="/settings" className="font-semibold text-primary hover:underline">
+          <Link
+            href="/settings"
+            className="font-semibold text-primary hover:underline"
+          >
             Load demo traffic
           </Link>{" "}
           or ingest production traffic, then run verification.
         </AlertBanner>
       ) : verification ? (
         <div className="space-y-6">
+          {verification.evidenceQuality !== "JUDGED" ? (
+            <AlertBanner>
+              {verification.verificationMethod === "SIMULATION"
+                ? "Simulation demonstrates the workflow but does not call the candidate model and cannot verify a switch."
+                : "This run used heuristic scoring and cannot produce a Safe to switch recommendation. Enable live replay and the LLM judge for verified evidence."}
+            </AlertBanner>
+          ) : null}
           {verification.experimentStatus === "PASSED" ||
           verification.experimentStatus === "FAILED" ||
           verification.switchStatus !== "NOT_RUN" ? (
-            <VerificationSummaryCard verification={verification} detail={detail} />
+            <VerificationSummaryCard
+              verification={verification}
+              detail={detail}
+            />
           ) : (
             <AlertBanner>
-              {verification.experimentStatus === "QUEUED" || verification.experimentStatus === "RUNNING"
+              {verification.experimentStatus === "QUEUED" ||
+              verification.experimentStatus === "RUNNING"
                 ? "Shadow verification is running on sampled production prompts."
                 : "Run verification to shadow-test a cheaper model on your traffic."}
             </AlertBanner>
@@ -124,7 +147,15 @@ function VerificationContent() {
             <AlertBanner variant="error">{verification.reason}</AlertBanner>
           ) : null}
 
-          <Panel title="Replay evidence" description="Prompt and response previews from shadow replay." padding={false}>
+          <Panel
+            title="Replay evidence"
+            description={
+              verification.verificationMethod === "SIMULATION"
+                ? "Demonstration rows reuse baseline responses and are not candidate-model evidence."
+                : "Prompt and response previews from live shadow replay."
+            }
+            padding={false}
+          >
             <div className="overflow-x-auto">
               <table className="data-table min-w-[960px]">
                 <thead>
@@ -141,7 +172,8 @@ function VerificationContent() {
                   {(detail?.runs ?? []).length === 0 ? (
                     <tr>
                       <td colSpan={6} className="py-8 text-muted-foreground">
-                        {verification.experimentStatus === "QUEUED" || verification.experimentStatus === "RUNNING"
+                        {verification.experimentStatus === "QUEUED" ||
+                        verification.experimentStatus === "RUNNING"
                           ? "Shadow verification is running…"
                           : "No replay rows yet. Run verification after ingesting traces."}
                       </td>
@@ -162,19 +194,24 @@ function VerificationContent() {
                           <span
                             className={cn(
                               "inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1",
-                              verdictStyles[run.verdict]
+                              verdictStyles[run.verdict],
                             )}
                           >
                             {verdictLabel(run.verdict)}
                           </span>
-                          {run.riskCategory !== "none" && run.verdict !== "pass" ? (
+                          {run.riskCategory !== "none" &&
+                          run.verdict !== "pass" ? (
                             <div className="mt-1 text-[10px] capitalize text-muted-foreground">
                               {run.riskCategory.replace(/_/g, " ")}
                             </div>
                           ) : null}
                         </td>
-                        <td className="tabular-nums font-medium">{run.semanticScore.toFixed(2)}</td>
-                        <td className="max-w-[200px] text-xs leading-relaxed text-muted-foreground">{run.reason}</td>
+                        <td className="tabular-nums font-medium">
+                          {run.semanticScore.toFixed(2)}
+                        </td>
+                        <td className="max-w-[200px] text-xs leading-relaxed text-muted-foreground">
+                          {run.reason}
+                        </td>
                       </tr>
                     ))
                   )}
@@ -203,7 +240,13 @@ function VerificationContent() {
 export default function VerificationPage() {
   return (
     <AppShell>
-      <Suspense fallback={<div className="page-container text-sm text-muted-foreground">Loading verification…</div>}>
+      <Suspense
+        fallback={
+          <div className="page-container text-sm text-muted-foreground">
+            Loading verification…
+          </div>
+        }
+      >
         <VerificationContent />
       </Suspense>
     </AppShell>

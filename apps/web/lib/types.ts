@@ -3,7 +3,7 @@ import type {
   AnalyticsSummary,
   EvaluationStatus,
   SwitchRecommendationStatus,
-  TraceStatus
+  TraceStatus,
 } from "@sentinelai/shared";
 
 export type AuthResponse = {
@@ -20,7 +20,11 @@ export type TaskProfileRecord = {
   taskName: string;
   riskLevel: "LOW" | "MEDIUM" | "HIGH";
   qualityThreshold: number;
-  optimizationGoal: "BALANCED" | "REDUCE_COST" | "REDUCE_LATENCY" | "MAXIMIZE_QUALITY";
+  optimizationGoal:
+    | "BALANCED"
+    | "REDUCE_COST"
+    | "REDUCE_LATENCY"
+    | "MAXIMIZE_QUALITY";
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -165,6 +169,12 @@ export type VerificationRecord = {
   candidateProvider: string;
   candidateModel: string;
   experimentStatus: string;
+  verificationMethod:
+    | "UNVERIFIED"
+    | "SIMULATION"
+    | "LIVE_REPLAY"
+    | "PRODUCTION_TRAFFIC";
+  evidenceQuality: "NONE" | "DEMO" | "HEURISTIC" | "JUDGED";
   switchStatus: SwitchRecommendationStatus;
   switchStatusLabel: string;
   passRate: number | null;

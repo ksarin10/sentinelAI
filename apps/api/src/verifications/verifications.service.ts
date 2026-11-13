@@ -6,7 +6,7 @@ import {
   deriveSwitchRecommendationStatus,
   passRateFromAggregate,
   switchStatusLabel,
-  type ReplayAggregate
+  type ReplayAggregate,
 } from "@sentinelai/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { ProjectsRepository } from "../projects/projects.repository";
@@ -23,7 +23,7 @@ function previewText(value: string, max = 120) {
 export class VerificationsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly projects: ProjectsRepository
+    private readonly projects: ProjectsRepository,
   ) {}
 
   private async assertProject(ownerId: string, projectId: string) {
@@ -40,14 +40,15 @@ export class VerificationsService {
     failedRuns: number;
     criticalFailures: number;
   }): ReplayAggregate {
-    const totalRuns = experiment.passedRuns + experiment.borderlineRuns + experiment.failedRuns;
+    const totalRuns =
+      experiment.passedRuns + experiment.borderlineRuns + experiment.failedRuns;
     return {
       passedRuns: experiment.passedRuns,
       borderlineRuns: experiment.borderlineRuns,
       failedRuns: experiment.failedRuns,
       criticalFailures: experiment.criticalFailures,
       totalRuns,
-      passRate: totalRuns === 0 ? null : experiment.passedRuns / totalRuns
+      passRate: totalRuns === 0 ? null : experiment.passedRuns / totalRuns,
     };
   }
 
@@ -60,6 +61,8 @@ export class VerificationsService {
       candidateProvider: string;
       candidateModel: string;
       status: string;
+      verificationMethod: string;
+      evidenceQuality: string;
       passedRuns: number;
       borderlineRuns: number;
       failedRuns: number;
@@ -72,16 +75,23 @@ export class VerificationsService {
       completedAt: Date | null;
       updatedAt: Date;
     },
-    extras?: { monthlySavingsUsd?: number | null }
+    extras?: { monthlySavingsUsd?: number | null },
   ) {
     const aggregate = this.aggregateFromExperiment(experiment);
-    const switchStatus = deriveSwitchRecommendationStatus({
-      passedRuns: experiment.passedRuns,
-      borderlineRuns: experiment.borderlineRuns,
-      failedRuns: experiment.failedRuns,
-      criticalFailures: experiment.criticalFailures,
-      experimentStatus: experiment.status
-    });
+    const qualifiesAsVerification =
+      experiment.evidenceQuality === "JUDGED" &&
+      ["LIVE_REPLAY", "PRODUCTION_TRAFFIC"].includes(
+        experiment.verificationMethod,
+      );
+    const switchStatus = qualifiesAsVerification
+      ? deriveSwitchRecommendationStatus({
+          passedRuns: experiment.passedRuns,
+          borderlineRuns: experiment.borderlineRuns,
+          failedRuns: experiment.failedRuns,
+          criticalFailures: experiment.criticalFailures,
+          experimentStatus: experiment.status,
+        })
+      : "NOT_RUN";
     const confidence = buildSampleConfidence(aggregate.totalRuns);
 
     return {
@@ -92,8 +102,15 @@ export class VerificationsService {
       candidateProvider: experiment.candidateProvider,
       candidateModel: experiment.candidateModel,
       experimentStatus: experiment.status,
+      verificationMethod: experiment.verificationMethod,
+      evidenceQuality: experiment.evidenceQuality,
       switchStatus,
-      switchStatusLabel: switchStatusLabel(switchStatus),
+      switchStatusLabel:
+        experiment.verificationMethod === "SIMULATION"
+          ? "Simulation only"
+          : experiment.evidenceQuality === "HEURISTIC"
+            ? "Heuristic evidence only"
+            : switchStatusLabel(switchStatus),
       passRate: passRateFromAggregate(aggregate),
       passedRuns: experiment.passedRuns,
       borderlineRuns: experiment.borderlineRuns,
@@ -109,15 +126,18 @@ export class VerificationsService {
       completedAt: experiment.completedAt?.toISOString() ?? null,
       updatedAt: experiment.updatedAt.toISOString(),
       sampleConfidence: confidence,
-      summarySentence: buildVerificationSummarySentence({
-        taskName: experiment.taskName,
-        passedRuns: experiment.passedRuns,
-        borderlineRuns: experiment.borderlineRuns,
-        failedRuns: experiment.failedRuns,
-        totalRuns: aggregate.totalRuns,
-        estimatedSavingsPercent: experiment.estimatedSavingsPercent,
-        switchStatus
-      })
+      summarySentence: qualifiesAsVerification
+        ? buildVerificationSummarySentence({
+            taskName: experiment.taskName,
+            passedRuns: experiment.passedRuns,
+            borderlineRuns: experiment.borderlineRuns,
+            failedRuns: experiment.failedRuns,
+            totalRuns: aggregate.totalRuns,
+            estimatedSavingsPercent: experiment.estimatedSavingsPercent,
+            switchStatus,
+          })
+        : (experiment.reason ??
+          "This result is not eligible for a switch recommendation."),
     };
   }
 
@@ -128,9 +148,9 @@ export class VerificationsService {
         projectId,
         ...(taskName ? { taskName } : {}),
         baselineProvider: "openai",
-        candidateProvider: "openai"
+        candidateProvider: "openai",
       },
-      orderBy: { updatedAt: "desc" }
+      orderBy: { updatedAt: "desc" },
     });
     return experiments.map((experiment) => this.mapExperiment(experiment));
   }
@@ -142,9 +162,9 @@ export class VerificationsService {
       include: {
         runs: {
           orderBy: { createdAt: "desc" },
-          take: 20
-        }
-      }
+          take: 20,
+        },
+      },
     });
 
     if (!experiment) {
@@ -154,20 +174,28 @@ export class VerificationsService {
     const traceIds = experiment.runs.map((run) => run.traceId);
     const traces = await this.prisma.trace.findMany({
       where: { id: { in: traceIds } },
-      select: { id: true, prompt: true }
+      select: { id: true, prompt: true },
     });
-    const promptByTrace = new Map(traces.map((trace) => [trace.id, trace.prompt]));
+    const promptByTrace = new Map(
+      traces.map((trace) => [trace.id, trace.prompt]),
+    );
 
     const taskCost = await this.prisma.trace.aggregate({
       where: { projectId, name: experiment.taskName, status: "SUCCESS" },
       _sum: { costUsd: true },
-      _count: { id: true }
+      _count: { id: true },
     });
     const totalCost = Number(taskCost._sum.costUsd ?? 0);
     const traceCount = taskCost._count.id;
     const monthlySavingsUsd =
       experiment.estimatedSavingsPercent != null && traceCount > 0
-        ? Number((totalCost * (experiment.estimatedSavingsPercent / 100) * 30).toFixed(2))
+        ? Number(
+            (
+              totalCost *
+              (experiment.estimatedSavingsPercent / 100) *
+              30
+            ).toFixed(2),
+          )
         : null;
 
     return {
@@ -178,7 +206,7 @@ export class VerificationsService {
           hallucinationScore: run.hallucinationScore,
           qualityThreshold: experiment.qualityThreshold,
           riskLevel: "MEDIUM",
-          replayFailed: !run.candidateResponse
+          replayFailed: !run.candidateResponse,
         });
 
         return {
@@ -194,9 +222,9 @@ export class VerificationsService {
           riskCategory: explanation.riskCategory,
           critical: explanation.critical,
           passed: explanation.verdict === "pass",
-          createdAt: run.createdAt.toISOString()
+          createdAt: run.createdAt.toISOString(),
         };
-      })
+      }),
     };
   }
 }

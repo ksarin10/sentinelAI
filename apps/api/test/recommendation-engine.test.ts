@@ -21,7 +21,7 @@ const catalog: ModelCatalogDto[] = [
     contextWindow: 1047576,
     capabilities: ["text", "json"],
     notes: null,
-    catalogUpdatedAt: "2026-05-23T00:00:00.000Z"
+    catalogUpdatedAt: "2026-05-23T00:00:00.000Z",
   },
   {
     id: "model_cheap",
@@ -37,8 +37,8 @@ const catalog: ModelCatalogDto[] = [
     contextWindow: 1047576,
     capabilities: ["text", "json"],
     notes: null,
-    catalogUpdatedAt: "2026-05-23T00:00:00.000Z"
-  }
+    catalogUpdatedAt: "2026-05-23T00:00:00.000Z",
+  },
 ];
 
 const healthyTask: TaskModelAnalyticsPoint = {
@@ -52,7 +52,7 @@ const healthyTask: TaskModelAnalyticsPoint = {
   averageCostUsd: 0.02,
   errorRate: 0,
   averageSemanticSimilarity: 0.86,
-  averageHallucinationRisk: 0.08
+  averageHallucinationRisk: 0.08,
 };
 
 const candidates = findRecommendationCandidates(
@@ -63,10 +63,10 @@ const candidates = findRecommendationCandidates(
       taskName: "support.answer",
       riskLevel: "MEDIUM",
       qualityThreshold: 0.8,
-      optimizationGoal: "REDUCE_COST"
-    }
+      optimizationGoal: "REDUCE_COST",
+    },
   ],
-  new Set(["openai"])
+  new Set(["openai"]),
 );
 
 assert.equal(candidates.length, 1);
@@ -91,22 +91,63 @@ const verifiedAfterExperiment = buildVerifiedRecommendations(
       averageCandidateSemantic: 0.84,
       averageCandidateHallucination: 0.09,
       estimatedSavingsPercent: 80,
-      qualityThreshold: 0.8
-    }
+      qualityThreshold: 0.8,
+      verificationMethod: "LIVE_REPLAY",
+      evidenceQuality: "JUDGED",
+    },
   ],
-  catalog
+  catalog,
 );
 
 assert.equal(verifiedAfterExperiment.length, 1);
 assert.equal(verifiedAfterExperiment[0].signals.verifiedRuns, 8);
 assert.equal(verifiedAfterExperiment[0].switchStatus, "SAFE_TO_SWITCH");
-assert.match(verifiedAfterExperiment[0].rationale[0], /GPT-4.1 mini was verified/i);
+assert.match(
+  verifiedAfterExperiment[0].rationale[0],
+  /GPT-4.1 mini was verified/i,
+);
+
+const simulatedExperiment = buildVerifiedRecommendations(
+  candidates,
+  [
+    {
+      taskName: "support.answer",
+      baselineProvider: "openai",
+      baselineModel: "gpt-4.1",
+      candidateProvider: "openai",
+      candidateModel: "gpt-4.1-mini",
+      passedRuns: 8,
+      borderlineRuns: 0,
+      failedRuns: 0,
+      criticalFailures: 0,
+      averageCandidateSemantic: 1,
+      averageCandidateHallucination: 0,
+      estimatedSavingsPercent: 80,
+      qualityThreshold: 0.8,
+      verificationMethod: "SIMULATION",
+      evidenceQuality: "DEMO",
+    },
+  ],
+  catalog,
+);
+assert.equal(
+  simulatedExperiment.length,
+  0,
+  "simulation must not produce a verified recommendation",
+);
 
 const weakQualityCandidates = findRecommendationCandidates(
   [{ ...healthyTask, averageSemanticSimilarity: 0.6 }],
   catalog,
-  [{ taskName: "support.answer", riskLevel: "MEDIUM", qualityThreshold: 0.8, optimizationGoal: "REDUCE_COST" }],
-  new Set(["openai"])
+  [
+    {
+      taskName: "support.answer",
+      riskLevel: "MEDIUM",
+      qualityThreshold: 0.8,
+      optimizationGoal: "REDUCE_COST",
+    },
+  ],
+  new Set(["openai"]),
 );
 
 assert.equal(weakQualityCandidates.length, 0);

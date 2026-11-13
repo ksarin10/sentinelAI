@@ -1,7 +1,10 @@
 import { InjectQueue } from "@nestjs/bullmq";
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { readShadowEconomicsConfig, type ShadowEconomicsConfig } from "@sentinelai/shared";
+import {
+  readShadowEconomicsConfig,
+  type ShadowEconomicsConfig,
+} from "@sentinelai/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { RecommendationCandidate } from "../recommendations/recommendation-candidates";
 import { PassedShadowExperiment } from "./shadow-experiment-engine";
@@ -24,7 +27,7 @@ function isRetryableShadowFailure(reason: string | null) {
 export class ShadowExperimentsService {
   constructor(
     private readonly prisma: PrismaService,
-    @InjectQueue("shadow-experiments") private readonly shadowQueue: Queue
+    @InjectQueue("shadow-experiments") private readonly shadowQueue: Queue,
   ) {}
 
   private startOfUtcDay() {
@@ -35,32 +38,34 @@ export class ShadowExperimentsService {
 
   async countExperimentsCreatedToday(projectId: string) {
     return this.prisma.shadowExperiment.count({
-      where: { projectId, createdAt: { gte: this.startOfUtcDay() } }
+      where: { projectId, createdAt: { gte: this.startOfUtcDay() } },
     });
   }
 
   async syncCandidates(
     projectId: string,
     candidates: RecommendationCandidate[],
-    economics: ShadowEconomicsConfig = readShadowEconomicsConfig(process.env)
+    economics: ShadowEconomicsConfig = readShadowEconomicsConfig(process.env),
   ) {
-    let experimentsCreatedToday = await this.countExperimentsCreatedToday(projectId);
+    let experimentsCreatedToday =
+      await this.countExperimentsCreatedToday(projectId);
 
     for (const candidate of candidates) {
       const experiment = await this.prisma.shadowExperiment.upsert({
         where: {
-          projectId_taskName_baselineProvider_baselineModel_candidateProvider_candidateModel: {
-            projectId,
-            taskName: candidate.taskName,
-            baselineProvider: candidate.currentProvider,
-            baselineModel: candidate.currentModel,
-            candidateProvider: candidate.recommendedProvider,
-            candidateModel: candidate.recommendedModel
-          }
+          projectId_taskName_baselineProvider_baselineModel_candidateProvider_candidateModel:
+            {
+              projectId,
+              taskName: candidate.taskName,
+              baselineProvider: candidate.currentProvider,
+              baselineModel: candidate.currentModel,
+              candidateProvider: candidate.recommendedProvider,
+              candidateModel: candidate.recommendedModel,
+            },
         },
         update: {
           qualityThreshold: candidate.qualityThreshold,
-          estimatedSavingsPercent: candidate.estimatedSavingsPercent
+          estimatedSavingsPercent: candidate.estimatedSavingsPercent,
         },
         create: {
           projectId,
@@ -71,33 +76,60 @@ export class ShadowExperimentsService {
           candidateModel: candidate.recommendedModel,
           qualityThreshold: candidate.qualityThreshold,
           estimatedSavingsPercent: candidate.estimatedSavingsPercent,
-          status: "QUEUED"
-        }
+          status: "QUEUED",
+        },
       });
 
-      const shouldRetryFailed = experiment.status === "FAILED" && isRetryableShadowFailure(experiment.reason);
+      const shouldRetryFailed =
+        experiment.status === "FAILED" &&
+        isRetryableShadowFailure(experiment.reason);
+      const canUpgradeEvidence =
+        experiment.status === "PASSED" &&
+        experiment.evidenceQuality !== "JUDGED" &&
+        process.env.SHADOW_REPLAY_MODE !== "simulate" &&
+        process.env.EVAL_JUDGE_ENABLED === "true" &&
+        Boolean(process.env.OPENAI_API_KEY);
 
-      if (shouldRetryFailed) {
-        await this.prisma.shadowExperiment.update({
-          where: { id: experiment.id },
-          data: {
-            status: "QUEUED",
-            reason: null,
-            passedRuns: 0,
-            failedRuns: 0,
-            averageCandidateSemantic: null,
-            averageCandidateHallucination: null,
-            completedAt: null
-          }
-        });
+      if (shouldRetryFailed || canUpgradeEvidence) {
+        await this.prisma.$transaction([
+          this.prisma.shadowExperiment.update({
+            where: { id: experiment.id },
+            data: {
+              status: "QUEUED",
+              reason: null,
+              passedRuns: 0,
+              borderlineRuns: 0,
+              failedRuns: 0,
+              criticalFailures: 0,
+              averageCandidateSemantic: null,
+              averageCandidateHallucination: null,
+              verificationMethod: "UNVERIFIED",
+              evidenceQuality: "NONE",
+              completedAt: null,
+            },
+          }),
+          this.prisma.shadowExperimentRun.deleteMany({
+            where: { experimentId: experiment.id },
+          }),
+        ]);
       }
 
-      if (experiment.status !== "QUEUED" && !shouldRetryFailed) {
+      if (
+        experiment.status !== "QUEUED" &&
+        !shouldRetryFailed &&
+        !canUpgradeEvidence
+      ) {
         continue;
       }
 
-      const isNewQueue = experiment.status === "QUEUED" && !shouldRetryFailed;
-      if (isNewQueue && experimentsCreatedToday >= economics.maxExperimentsPerProjectPerDay) {
+      const isNewQueue =
+        experiment.status === "QUEUED" &&
+        !shouldRetryFailed &&
+        !canUpgradeEvidence;
+      if (
+        isNewQueue &&
+        experimentsCreatedToday >= economics.maxExperimentsPerProjectPerDay
+      ) {
         continue;
       }
 
@@ -112,7 +144,7 @@ export class ShadowExperimentsService {
     const experiment = await this.prisma.shadowExperiment.findFirst({
       where: { projectId, status: "FAILED" },
       orderBy: { completedAt: "desc" },
-      select: { reason: true }
+      select: { reason: true },
     });
 
     return experiment?.reason ?? null;
@@ -121,11 +153,11 @@ export class ShadowExperimentsService {
   async experimentCounts(projectId: string) {
     const [pendingExperiments, failedExperiments] = await Promise.all([
       this.prisma.shadowExperiment.count({
-        where: { projectId, status: { in: ["QUEUED", "RUNNING"] } }
+        where: { projectId, status: { in: ["QUEUED", "RUNNING"] } },
       }),
       this.prisma.shadowExperiment.count({
-        where: { projectId, status: "FAILED" }
-      })
+        where: { projectId, status: "FAILED" },
+      }),
     ]);
 
     return { pendingExperiments, failedExperiments };
@@ -133,7 +165,12 @@ export class ShadowExperimentsService {
 
   async listPassed(projectId: string): Promise<PassedShadowExperiment[]> {
     const experiments = await this.prisma.shadowExperiment.findMany({
-      where: { projectId, status: "PASSED" },
+      where: {
+        projectId,
+        status: "PASSED",
+        evidenceQuality: "JUDGED",
+        verificationMethod: { in: ["LIVE_REPLAY", "PRODUCTION_TRAFFIC"] },
+      },
       select: {
         taskName: true,
         baselineProvider: true,
@@ -147,8 +184,10 @@ export class ShadowExperimentsService {
         averageCandidateSemantic: true,
         averageCandidateHallucination: true,
         estimatedSavingsPercent: true,
-        qualityThreshold: true
-      }
+        qualityThreshold: true,
+        verificationMethod: true,
+        evidenceQuality: true,
+      },
     });
 
     return experiments;

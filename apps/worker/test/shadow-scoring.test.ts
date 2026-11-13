@@ -6,7 +6,8 @@ async function main() {
   process.env.SHADOW_REPLAY_MODE = "simulate";
 
   const trace = {
-    prompt: "Summarize the customer complaint and recommend the next support action.",
+    prompt:
+      "Summarize the customer complaint and recommend the next support action.",
     response: "The customer reports a delayed delivery.",
     metadata: null,
     evaluations: [
@@ -14,18 +15,24 @@ async function main() {
         status: "COMPLETED",
         scores: [
           { metric: "semantic_similarity", score: 0.86 },
-          { metric: "hallucination_risk", score: 0.08 }
-        ]
-      }
-    ]
+          { metric: "hallucination_risk", score: 0.08 },
+        ],
+      },
+    ],
   };
 
-  const scores = await scoreShadowReplayRun(trace, trace.response!, trace.response!, {
-    isCrossProvider: false,
-    usedSimulate: true
-  });
+  const scores = await scoreShadowReplayRun(
+    trace,
+    trace.response!,
+    trace.response!,
+    {
+      isCrossProvider: false,
+      usedSimulate: true,
+    },
+  );
   assert.equal(scores.semantic, 0.86);
   assert.equal(scores.hallucination, 0.08);
+  assert.equal(scores.evidenceQuality, "DEMO");
 
   process.env.SHADOW_REPLAY_MODE = originalMode;
 }
