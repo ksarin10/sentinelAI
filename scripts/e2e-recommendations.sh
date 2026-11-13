@@ -37,6 +37,10 @@ const data = JSON.parse(require('fs').readFileSync(0,'utf8'));
 console.log('insights:', data.insights?.reason, '-', data.insights?.message?.slice(0,120));
 console.log('candidates:', data.insights?.candidateCount, 'pending:', data.insights?.pendingExperiments, 'failed:', data.insights?.failedExperiments);
 console.log('verified:', data.recommendations?.length);
+if ((data.insights?.candidateCount ?? 0) === 0 && (data.insights?.pendingExperiments ?? 0) === 0) {
+  console.error('No shadow experiment was queued. Set SHADOW_MIN_SAVINGS_USD=0 for this test.');
+  process.exit(1);
+}
 "
 
 echo "==> Waiting for worker shadow jobs (poll up to 90s)..."
@@ -58,13 +62,23 @@ node -e "
 const data = JSON.parse(process.argv[1]);
 console.log('insights:', data.insights?.reason ?? 'null', '-', (data.insights?.message ?? '').slice(0,140));
 console.log('verified recommendations:', data.recommendations?.length ?? 0);
-if (data.recommendations?.length) {
-  const r = data.recommendations[0];
-  console.log('first:', r.taskName, r.currentModel, '->', r.recommendedModel, 'confidence:', r.confidence);
-}
-if (!data.recommendations?.length) {
+if (data.recommendations?.length !== 0) {
+  console.error('Simulation must not create verified recommendations.');
   process.exit(1);
 }
 " "${result}"
 
-echo "==> E2E PASSED"
+verifications=$(curl -sf "${API_URL}/projects/${project_id}/verifications?taskName=support.answer" \
+  -H "authorization: Bearer ${token}")
+
+node -e "
+const rows = JSON.parse(process.argv[1]);
+const simulation = rows.find((row) => row.verificationMethod === 'SIMULATION');
+if (!simulation) throw new Error('Expected a simulation result');
+if (simulation.evidenceQuality !== 'DEMO') throw new Error('Simulation must be DEMO evidence');
+if (simulation.switchStatus !== 'NOT_RUN') throw new Error('Simulation must not produce a switch verdict');
+if (simulation.switchStatusLabel !== 'Simulation only') throw new Error('Simulation label is not explicit');
+console.log('simulation boundary:', simulation.switchStatusLabel, '-', simulation.evidenceQuality);
+" "${verifications}"
+
+echo "==> E2E PASSED: simulation remained separate from verified evidence"

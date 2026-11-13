@@ -27,10 +27,11 @@ Pass rate is `passed / (passed + borderline + failed)`. Borderline replays count
 - Go ingestion gateway with an AES-GCM-encrypted, fsync-backed spool, per-key capacity isolation, retry backoff, and dead letters
 - TypeScript monorepo with separate API, worker, web, SDK, and shared-domain packages
 - Asynchronous evaluation and replay jobs backed by Redis and BullMQ
+- Transactional evaluation outbox prevents database writes from being stranded when Redis is unavailable
 - PostgreSQL persistence with Prisma migrations
 - Encrypted per-project provider credentials
 - Deterministic simulation mode for local development without provider API calls
-- Unit, smoke, and end-to-end test paths enforced by GitHub Actions
+- GitHub Actions enforce TypeScript tests/typechecks, Go race tests, transactional-ingestion smoke coverage, and the simulation-evidence boundary
 - Docker Compose setup for the application and its dependencies
 
 ## Architecture
@@ -46,11 +47,14 @@ flowchart LR
     SDK --> GATEWAY
     GATEWAY --> SPOOL
     GATEWAY --> API --> PG
+    PG --> OUTBOX[Evaluation outbox]
   end
   subgraph verify [Verify]
+    OUTBOX --> DISPATCH[Idempotent dispatcher]
+    DISPATCH --> Q[Redis / BullMQ]
     W[apps/worker BullMQ]
     R[Shadow replay OpenAI]
-    API --> W
+    Q --> W
     W --> R
     W --> PG
   end
@@ -80,6 +84,12 @@ flowchart LR
 3. Request recommendations; the API queues shadow experiments for verifiable same-provider candidates.
 4. The worker samples up to `SHADOW_MAX_REPLAYS_PER_EXPERIMENT` traces (default 8), replays prompts, and scores responses.
 5. Review results on the Verification page: aggregate summary, savings estimate, sample confidence, and replay evidence rows.
+
+Evidence rules:
+
+- **Simulation** reuses the baseline response to demonstrate workflow only. It is labeled `DEMO` and cannot produce a switch recommendation.
+- **Live replay with heuristic scoring** is labeled `HEURISTIC` and remains preliminary.
+- Only **judged live replay** or **judged production traffic** is labeled `JUDGED` and can produce “Safe to switch” or “Needs review.”
 
 ## Tech stack
 
@@ -124,6 +134,7 @@ Recreate containers after changing `.env` (rebuild `web` when `NEXT_PUBLIC_*` ch
 | `SHADOW_MAX_REPLAYS_PER_EXPERIMENT` | Max replays per experiment (default `8`) |
 | `SHADOW_MIN_SAVINGS_USD` | Minimum estimated savings to queue shadow work |
 | `OPENAI_API_KEY` | Live replay and optional LLM judge (Settings or env) |
+| `EVAL_JUDGE_ENABLED` | Must be `true`, with an OpenAI key, for live replays to become recommendation-eligible judged evidence |
 | `PROVIDER_CREDENTIALS_SECRET` | Encrypts per-project provider keys (defaults to `JWT_SECRET`) |
 | `INGEST_MAX_PENDING` | Hard limit for queued and in-flight traces (default `100000`) |
 | `INGEST_MAX_PENDING_PER_KEY` | Per-API-key limit that prevents one client from filling the shared queue (default `10000`) |
@@ -159,7 +170,7 @@ npm run smoke
 ./scripts/e2e-recommendations.sh   # requires API and worker
 ```
 
-Use `SHADOW_REPLAY_MODE=simulate` for local verification without provider API keys.
+Use `SHADOW_REPLAY_MODE=simulate` to demonstrate the workflow without provider API keys. Simulations are labeled as demo evidence and cannot produce a verified switch recommendation.
 
 ## Application routes
 

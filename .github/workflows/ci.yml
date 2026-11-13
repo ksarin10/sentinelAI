@@ -53,3 +53,82 @@ jobs:
 
       - name: Test
         run: npm run test --workspaces --if-present
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sentinel
+          POSTGRES_PASSWORD: sentinel
+          POSTGRES_DB: sentinelai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sentinel -d sentinelai"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sentinel:sentinel@localhost:5432/sentinelai?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: integration-test-secret
+      API_PORT: 4000
+      SHADOW_REPLAY_MODE: simulate
+      SHADOW_MIN_SAVINGS_USD: "0"
+      EVAL_JUDGE_ENABLED: "false"
+      RUN_CATALOG_SYNC_ON_START: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run prisma:generate
+          npm run build -w @sentinelai/shared
+          npm run build -w @sentinelai/api
+          npm run build -w @sentinelai/worker
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+
+      - name: Start API and worker
+        run: |
+          npm run start:prod -w @sentinelai/api > /tmp/sentinel-api.log 2>&1 &
+          npm run start:prod -w @sentinelai/worker > /tmp/sentinel-worker.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl -sf http://localhost:4000/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/sentinel-api.log
+          cat /tmp/sentinel-worker.log
+          exit 1
+
+      - name: Smoke test transactional ingestion
+        run: npm run smoke
+
+      - name: Verify simulation evidence boundary
+        run: ./scripts/e2e-recommendations.sh
+
+      - name: Print service logs on failure
+        if: failure()
+        run: |
+          cat /tmp/sentinel-api.log || true
+          cat /tmp/sentinel-worker.log || true

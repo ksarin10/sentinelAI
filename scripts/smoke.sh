@@ -48,4 +48,23 @@ trace=$(curl -sf -X POST "${API_URL}/ingest/traces" \
   -d '{"name":"smoke.task","provider":"openai","model":"gpt-4.1-mini","prompt":"Say hello in one sentence.","response":"Hello from the smoke test.","latencyMs":120,"tokens":{"promptTokens":12,"completionTokens":8,"totalTokens":20},"costUsd":0.0001}')
 
 echo "Ingested trace: ${trace}"
+evaluation_id=$(node -e "const t=JSON.parse(process.argv[1]); if(!t.evaluationId || !t.queued) throw new Error('trace was not durably scheduled'); process.stdout.write(t.evaluationId)" "${trace}")
+
+echo "==> Waiting for outbox-dispatched evaluation..."
+evaluation_status=""
+for _ in $(seq 1 20); do
+  evaluation=$(curl -sf "${API_URL}/projects/${project_id}/evaluations/${evaluation_id}" \
+    -H "authorization: Bearer ${token}")
+  evaluation_status=$(node -e "process.stdout.write(JSON.parse(process.argv[1]).status)" "${evaluation}")
+  if [[ "${evaluation_status}" = "COMPLETED" ]]; then
+    break
+  fi
+  sleep 1
+done
+
+if [[ "${evaluation_status}" != "COMPLETED" ]]; then
+  echo "Evaluation did not complete; final status: ${evaluation_status}" >&2
+  exit 1
+fi
+echo "Evaluation completed through transactional outbox: ${evaluation_id}"
 echo "Smoke test completed successfully."
