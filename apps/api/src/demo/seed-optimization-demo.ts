@@ -1,7 +1,9 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { syncModelCatalog } from "../model-catalog/sync-model-catalog";
 
 type MockTraceSpec = {
+  externalId: string;
   name: string;
   provider: string;
   model: string;
@@ -23,7 +25,7 @@ async function createMockTrace(prisma: PrismaClient, projectId: string, spec: Mo
   const trace = await prisma.trace.create({
     data: {
       projectId,
-      externalId: `mock-${spec.name}-${spec.createdAt.getTime()}`,
+      externalId: spec.externalId,
       name: spec.name,
       provider: spec.provider,
       model: spec.model,
@@ -82,6 +84,7 @@ const supportResponse =
   "The customer reports a delayed delivery and missing tracking updates. Verify carrier status, send a proactive update, and offer a replacement or refund if the shipment is lost.";
 
 export async function seedOptimizationDemo(prisma: PrismaClient, projectId: string) {
+  const seedRunId = randomUUID();
   const catalogResult = await syncModelCatalog(prisma);
 
   await prisma.project.update({
@@ -128,6 +131,7 @@ export async function seedOptimizationDemo(prisma: PrismaClient, projectId: stri
   ];
 
   const expensiveSupportTraces: MockTraceSpec[] = supportScores.map((scores, index) => ({
+    externalId: `mock-${seedRunId}-support-${index}`,
     name: "support.answer",
     provider: "openai",
     model: "gpt-4.1",
@@ -144,6 +148,7 @@ export async function seedOptimizationDemo(prisma: PrismaClient, projectId: stri
   }));
 
   const retiringModelTraces: MockTraceSpec[] = Array.from({ length: 6 }, (_, index) => ({
+    externalId: `mock-${seedRunId}-policy-${index}`,
     name: "policy.qa",
     provider: "anthropic",
     model: "claude-sonnet-4.5",
