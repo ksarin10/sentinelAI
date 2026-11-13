@@ -7,9 +7,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
+	"os"
+	"path/filepath"
 )
 
 var encryptedHeader = []byte("SEN1")
+var keyCheckPlaintext = []byte("sentinelai-spool-key-v1")
 
 type codec struct {
 	aead cipher.AEAD
@@ -69,4 +72,51 @@ func (c *codec) open(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("decrypt spool record: authentication failed")
 	}
 	return plaintext, nil
+}
+
+func (c *codec) verifyKey(root string) error {
+	if c.aead == nil {
+		return nil
+	}
+	path := filepath.Join(root, ".keycheck")
+	data, err := os.ReadFile(path)
+	if err == nil {
+		plaintext, err := c.open(data)
+		if err != nil {
+			return fmt.Errorf("verify spool encryption key: %w", err)
+		}
+		if !bytes.Equal(plaintext, keyCheckPlaintext) {
+			return fmt.Errorf("verify spool encryption key: marker mismatch")
+		}
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("read spool encryption marker: %w", err)
+	}
+
+	sealed, err := c.seal(keyCheckPlaintext)
+	if err != nil {
+		return err
+	}
+	temporary, err := os.CreateTemp(root, ".keycheck-*")
+	if err != nil {
+		return fmt.Errorf("create spool encryption marker: %w", err)
+	}
+	temporaryName := temporary.Name()
+	defer os.Remove(temporaryName)
+	if _, err := temporary.Write(sealed); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("write spool encryption marker: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("sync spool encryption marker: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close spool encryption marker: %w", err)
+	}
+	if err := os.Rename(temporaryName, path); err != nil {
+		return fmt.Errorf("commit spool encryption marker: %w", err)
+	}
+	return syncDirectory(root)
 }

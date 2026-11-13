@@ -77,6 +77,9 @@ func OpenWithLimits(root string, maxPending, maxPendingPerTenant int, secret str
 			return nil, fmt.Errorf("create spool directory: %w", err)
 		}
 	}
+	if err := recordCodec.verifyKey(root); err != nil {
+		return nil, err
+	}
 
 	s := &Spool{
 		root:                root,

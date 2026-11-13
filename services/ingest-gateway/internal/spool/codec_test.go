@@ -68,6 +68,17 @@ func TestEncryptedSpoolRejectsWrongSecret(t *testing.T) {
 	}
 }
 
+func TestEncryptedEmptySpoolRejectsWrongSecret(t *testing.T) {
+	root := t.TempDir()
+	if _, err := OpenEncrypted(root, 10, testSpoolSecret); err != nil {
+		t.Fatal(err)
+	}
+	_, err := OpenEncrypted(root, 10, "different-secret-with-at-least-32-characters")
+	if err == nil || !strings.Contains(err.Error(), "authentication failed") {
+		t.Fatalf("open error = %v, want authentication failure", err)
+	}
+}
+
 func TestEncryptedSpoolReadsExistingPlaintextRecord(t *testing.T) {
 	root := t.TempDir()
 	plain, err := Open(root, 10)
