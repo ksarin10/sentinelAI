@@ -11,12 +11,9 @@ import {
   readShadowEconomicsConfig,
 } from "@sentinelai/shared";
 import { resolveProviderApiKey } from "./resolve-provider-api-key";
+import { summarizeProductionTraffic } from "./production-traffic";
 import { getShadowReplayMode, replayCandidatePrompt } from "./shadow-replay";
 import { scoreShadowReplayRun } from "./shadow-scoring";
-
-function maxHallucinationRisk() {
-  return 0.25;
-}
 
 async function markExperimentFromProductionTraffic(
   prisma: PrismaClient,
@@ -65,47 +62,32 @@ async function markExperimentFromProductionTraffic(
         : [];
     }),
   );
-  const semanticScores = judgedEvaluations.map(
-    (evaluation) => evaluation.semantic,
-  );
-  const hallucinationScores = judgedEvaluations.map(
-    (evaluation) => evaluation.hallucination,
-  );
-
-  if (semanticScores.length < 5) {
+  if (judgedEvaluations.length < 5) {
     return false;
   }
 
-  const averageSemantic =
-    semanticScores.reduce((sum, score) => sum + score, 0) /
-    semanticScores.length;
-  const averageHallucination =
-    hallucinationScores.length === 0
-      ? 0
-      : hallucinationScores.reduce((sum, score) => sum + score, 0) /
-        hallucinationScores.length;
-
-  if (
-    averageSemantic < experiment.qualityThreshold ||
-    averageHallucination > maxHallucinationRisk()
-  ) {
-    return false;
-  }
+  const summary = summarizeProductionTraffic(
+    judgedEvaluations,
+    experiment.qualityThreshold,
+  );
 
   await prisma.shadowExperiment.update({
     where: { id: experiment.id },
     data: {
-      status: "PASSED",
+      status: summary.completion.experimentPassed ? "PASSED" : "FAILED",
       verificationMethod: "PRODUCTION_TRAFFIC",
       evidenceQuality: "JUDGED",
-      passedRuns: semanticScores.length,
-      borderlineRuns: 0,
-      failedRuns: 0,
-      criticalFailures: 0,
-      averageCandidateSemantic: Number(averageSemantic.toFixed(3)),
-      averageCandidateHallucination: Number(averageHallucination.toFixed(3)),
-      reason:
-        "Verified using existing production traffic on the candidate model.",
+      passedRuns: summary.passedRuns,
+      borderlineRuns: summary.borderlineRuns,
+      failedRuns: summary.failedRuns,
+      criticalFailures: summary.criticalFailures,
+      averageCandidateSemantic: Number(summary.averageSemantic.toFixed(3)),
+      averageCandidateHallucination: Number(
+        summary.averageHallucination.toFixed(3),
+      ),
+      reason: summary.completion.experimentPassed
+        ? `Classified ${summary.totalRuns} judged production evaluations individually: ${summary.passedRuns} passed, ${summary.borderlineRuns} borderline, ${summary.failedRuns} failed, ${summary.criticalFailures} critical.`
+        : `Production traffic did not meet the quality bar after individual classification: ${summary.passedRuns} passed, ${summary.borderlineRuns} borderline, ${summary.failedRuns} failed, ${summary.criticalFailures} critical.`,
       completedAt: new Date(),
     },
   });

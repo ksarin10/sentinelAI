@@ -90,6 +90,7 @@ Evidence rules:
 - **Simulation** reuses the baseline response to demonstrate workflow only. It is labeled `DEMO` and cannot produce a switch recommendation.
 - **Live replay with heuristic scoring** is labeled `HEURISTIC` and remains preliminary.
 - Only **judged live replay** or **judged production traffic** is labeled `JUDGED` and can produce “Safe to switch” or “Needs review.”
+- Judged production evaluations are classified one by one before aggregation, so a critical failure cannot disappear inside a passing average.
 
 ## Tech stack
 
