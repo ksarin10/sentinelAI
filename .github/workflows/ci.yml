@@ -26,6 +26,9 @@ jobs:
       - name: Test with race detector
         run: go test -race ./...
 
+      - name: Test operating-system process-kill recovery
+        run: go run ./cmd/ingest-chaos -traces 25 -concurrency 4
+
       - name: Build gateway
         run: go build ./cmd/ingest-gateway
 

@@ -69,14 +69,14 @@ These are local development measurements, not a production capacity claim. Files
 
 ## Outage and crash-recovery experiment
 
-The chaos command accepts traces while a fake downstream API returns `503`, persists one retry for every trace, simulates a downstream success immediately followed by a process crash before receipt persistence, reopens the encrypted spool as a fresh service instance, and drains the backlog into an idempotent sink:
+The chaos command accepts traces while a fake downstream API returns `503` and persists one retry for every trace. It then starts a child process that claims a trace and delivers it successfully, kills that process before it can persist a receipt, opens a fresh spool and worker instance over the same files, and drains the backlog into an idempotent sink:
 
 ```bash
 cd services/ingest-gateway
 go run ./cmd/ingest-chaos -traces 500 -concurrency 12
 ```
 
-Result from November 12, 2026:
+Result from November 14, 2026:
 
 | Measurement | Result |
 | --- | ---: |
@@ -87,9 +87,10 @@ Result from November 12, 2026:
 | Lost traces | 0 |
 | Pending after recovery | 0 |
 | Experiment errors | 0 |
-| Total duration | 30.41 seconds |
+| OS process kill reached after upstream acceptance | Yes |
+| Total duration | 28.07 seconds |
 
-This command simulates process death by abandoning an in-flight lease and constructing a fresh spool and worker instance over the same files. It does not issue an operating-system `SIGKILL`. That separate process-level test remains future work.
+The child is killed with `os.Process.Kill` after the fake upstream records the delivery and before the child acknowledges its spool lease. On Unix runners this sends `SIGKILL`. The repeated delivery is expected under the gateway's at-least-once contract; the idempotent sink records one unique downstream effect. CI runs the same process-kill experiment with 25 traces on every change.
 
 ## Profiling story: eliminating retry-path syscalls
 

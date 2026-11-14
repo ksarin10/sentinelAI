@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,6 +12,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,13 +44,22 @@ type report struct {
 	PendingAfterRecovery       int     `json:"pendingAfterRecovery"`
 	Errors                     int64   `json:"errors"`
 	DurationSeconds            float64 `json:"durationSeconds"`
+	ProcessKillVerified        bool    `json:"processKillVerified"`
 	Scenario                   string  `json:"scenario"`
 }
 
 func main() {
 	traceCount := flag.Int("traces", 250, "number of traces to accept during the outage")
 	concurrency := flag.Int("concurrency", 12, "concurrent ingestion clients")
+	crashChild := flag.Bool("crash-child", false, "run the internal crash child")
+	spoolRoot := flag.String("spool-root", "", "spool path for the internal crash child")
+	upstreamURL := flag.String("upstream-url", "", "upstream URL for the internal crash child")
+	maxPending := flag.Int("max-pending", 0, "spool capacity for the internal crash child")
 	flag.Parse()
+	if *crashChild {
+		check(runCrashChild(*spoolRoot, *upstreamURL, *maxPending))
+		return
+	}
 	if *traceCount < 2 || *concurrency < 1 {
 		fmt.Fprintln(os.Stderr, "traces must be at least 2 and concurrency must be positive")
 		os.Exit(2)
@@ -79,16 +92,10 @@ func main() {
 		}
 	}
 
-	// Simulate the hardest ambiguity: upstream accepted a trace, then the
-	// process died before it could persist the receipt.
 	clock = clock.Add(2 * time.Hour)
-	crashedLease, err := store.Claim(context.Background(), clock)
-	check(err)
 	sink.setAvailable(true)
-	sink.accept(crashedLease.Item.Body)
+	check(killAfterUpstreamAcceptance(root, upstream.URL, *traceCount+1))
 
-	// Opening the same spool represents a fresh process. Recovery returns the
-	// unacknowledged processing file to the ready queue.
 	restarted, err := spool.OpenWithLimits(root, *traceCount+1, *traceCount+1, chaosSecret)
 	check(err)
 	recoveryWorker := chaosWorker(restarted, upstream.URL, registry, func() time.Time { return clock })
@@ -110,7 +117,8 @@ func main() {
 		PendingAfterRecovery:       restarted.Pending(),
 		Errors:                     failures.Load(),
 		DurationSeconds:            rounded(time.Since(started).Seconds()),
-		Scenario:                   "backend outage, retry persistence, success-before-ack crash, process restart",
+		ProcessKillVerified:        true,
+		Scenario:                   "backend outage, retry persistence, upstream success, operating-system process kill before ack, process restart",
 	}
 	sink.mu.Unlock()
 
@@ -119,6 +127,106 @@ func main() {
 	check(encoder.Encode(result))
 	if result.Lost != 0 || result.PendingAfterRecovery != 0 || result.Errors != 0 || result.DuplicateTransportDelivery != 1 {
 		os.Exit(1)
+	}
+}
+
+func killAfterUpstreamAcceptance(root, upstreamURL string, maxPending int) error {
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve chaos executable: %w", err)
+	}
+	command := exec.Command(
+		executable,
+		"-crash-child",
+		"-spool-root", root,
+		"-upstream-url", upstreamURL,
+		"-max-pending", strconv.Itoa(maxPending),
+	)
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("open crash child stdout: %w", err)
+	}
+	command.Stderr = os.Stderr
+	if err := command.Start(); err != nil {
+		return fmt.Errorf("start crash child: %w", err)
+	}
+	exited := false
+	defer func() {
+		if !exited {
+			_ = command.Process.Kill()
+			_ = command.Wait()
+		}
+	}()
+
+	type markerResult struct {
+		value string
+		err   error
+	}
+	markerReady := make(chan markerResult, 1)
+	go func() {
+		marker, readErr := bufio.NewReader(stdout).ReadString('\n')
+		markerReady <- markerResult{value: marker, err: readErr}
+	}()
+	var marker string
+	select {
+	case result := <-markerReady:
+		if result.err != nil {
+			return fmt.Errorf("wait for crash boundary: %w", result.err)
+		}
+		marker = result.value
+	case <-time.After(15 * time.Second):
+		return fmt.Errorf("timed out waiting for upstream acceptance")
+	}
+	if strings.TrimSpace(marker) != "upstream-accepted" {
+		return fmt.Errorf("unexpected crash child marker %q", strings.TrimSpace(marker))
+	}
+	if err := command.Process.Kill(); err != nil {
+		return fmt.Errorf("kill crash child: %w", err)
+	}
+	if err := command.Wait(); err == nil {
+		return fmt.Errorf("crash child exited successfully instead of being killed")
+	}
+	exited = true
+	return nil
+}
+
+func runCrashChild(root, upstreamURL string, maxPending int) error {
+	if root == "" || upstreamURL == "" || maxPending < 1 {
+		return fmt.Errorf("crash child requires spool-root, upstream-url, and max-pending")
+	}
+	store, err := spool.OpenWithLimits(root, maxPending, maxPending, chaosSecret)
+	if err != nil {
+		return err
+	}
+	lease, err := store.Claim(context.Background(), time.Now().Add(24*time.Hour))
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequest(
+		http.MethodPost,
+		strings.TrimRight(upstreamURL, "/")+"/api/ingest/traces",
+		bytes.NewReader(lease.Item.Body),
+	)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", lease.Item.ID)
+	request.Header.Set("X-Sentinel-API-Key", lease.Item.APIKey)
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(io.Discard, response.Body)
+	_ = response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("upstream returned %d", response.StatusCode)
+	}
+	if _, err := fmt.Fprintln(os.Stdout, "upstream-accepted"); err != nil {
+		return err
+	}
+	for {
+		time.Sleep(time.Hour)
 	}
 }
 
@@ -191,12 +299,6 @@ func (s *sinkState) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-}
-
-func (s *sinkState) accept(body []byte) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.acceptLocked(body)
 }
 
 func (s *sinkState) acceptLocked(body []byte) bool {
