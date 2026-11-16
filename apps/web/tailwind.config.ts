@@ -1,12 +1,17 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
+  content: [
+    "./app/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./lib/**/*.{ts,tsx}",
+  ],
   theme: {
     extend: {
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
-        display: ["var(--font-display)", "Georgia", "serif"]
+        display: ["var(--font-sans)", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -20,25 +25,28 @@ const config: Config = {
         accent: "hsl(var(--accent))",
         sidebar: "hsl(var(--sidebar))",
         "sidebar-foreground": "hsl(var(--sidebar-foreground))",
-        ring: "hsl(var(--ring))"
+        ring: "hsl(var(--ring))",
       },
       borderRadius: {
-        xl: "0.875rem",
-        "2xl": "1.125rem",
-        "3xl": "1.375rem"
+        xl: "0.625rem",
+        "2xl": "0.75rem",
+        "3xl": "1rem",
       },
       boxShadow: {
-        panel: "0 1px 2px hsl(222 42% 9% / 0.04), 0 8px 24px hsl(222 42% 9% / 0.06)",
-        lift: "0 12px 40px hsl(222 42% 9% / 0.1), 0 2px 8px hsl(222 42% 9% / 0.04)",
-        glow: "0 0 0 1px hsl(168 50% 40% / 0.15), 0 8px 32px hsl(168 50% 40% / 0.12)"
+        panel:
+          "0 1px 0 hsl(0 0% 100% / 0.025), 0 16px 40px hsl(225 40% 2% / 0.16)",
+        lift: "0 1px 0 hsl(0 0% 100% / 0.04), 0 24px 64px hsl(225 50% 2% / 0.32)",
+        glow: "0 0 0 1px hsl(81 88% 64% / 0.18), 0 0 28px hsl(81 88% 64% / 0.08)",
       },
       backgroundImage: {
-        "primary-gradient": "linear-gradient(135deg, hsl(168 65% 38%) 0%, hsl(168 55% 28%) 100%)",
-        "accent-gradient": "linear-gradient(135deg, hsl(14 88% 58%) 0%, hsl(14 75% 48%) 100%)"
-      }
-    }
+        "primary-gradient":
+          "linear-gradient(135deg, hsl(81 88% 66%) 0%, hsl(72 86% 57%) 100%)",
+        "accent-gradient":
+          "linear-gradient(135deg, hsl(190 92% 60%) 0%, hsl(215 88% 62%) 100%)",
+      },
+    },
   },
-  plugins: []
+  plugins: [],
 };
 
 export default config;

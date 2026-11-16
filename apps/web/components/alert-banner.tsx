@@ -1,22 +1,28 @@
 import { cn } from "../lib/utils";
 
 const variants = {
-  error: "border-red-200/80 bg-red-50 text-red-800",
+  error: "border-red-400/20 bg-red-400/[0.07] text-red-300",
   success: "border-primary/20 bg-primary/[0.07] text-primary",
-  notice: "border-border bg-muted text-foreground"
+  notice: "border-border bg-muted/60 text-foreground",
 };
 
 export function AlertBanner({
   variant = "notice",
   children,
-  className
+  className,
 }: {
   variant?: keyof typeof variants;
   children: React.ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("rounded-xl border px-4 py-3 text-sm leading-relaxed", variants[variant], className)}>
+    <div
+      className={cn(
+        "rounded-lg border px-4 py-3 text-sm leading-relaxed shadow-panel",
+        variants[variant],
+        className,
+      )}
+    >
       {children}
     </div>
   );

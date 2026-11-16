@@ -6,7 +6,7 @@ export function Panel({
   action,
   children,
   className,
-  padding = true
+  padding = true,
 }: {
   title?: string;
   description?: string;
@@ -18,10 +18,16 @@ export function Panel({
   return (
     <section className={cn("glass-card overflow-hidden", className)}>
       {title ? (
-        <div className="flex items-start justify-between gap-4 border-b border-border/80 bg-muted/30 px-5 py-4 sm:px-6">
+        <div className="flex items-start justify-between gap-4 border-b border-border/80 bg-white/[0.012] px-5 py-4 sm:px-6">
           <div>
-            <h2 className="text-base font-bold text-foreground">{title}</h2>
-            {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+            <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+              {title}
+            </h2>
+            {description ? (
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
           </div>
           {action}
         </div>

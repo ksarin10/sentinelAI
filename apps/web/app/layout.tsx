@@ -1,29 +1,32 @@
 import type { Metadata } from "next";
-import { DM_Serif_Display, Plus_Jakarta_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const sans = Plus_Jakarta_Sans({
+const sans = Geist({
   subsets: ["latin"],
   variable: "--font-sans",
-  display: "swap"
+  display: "swap",
 });
 
-const display = DM_Serif_Display({
-  weight: "400",
+const mono = Geist_Mono({
   subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap"
+  variable: "--font-mono",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "SentinelAI — Verified model switching",
   description:
-    "Before you switch LLM models in production, replay real prompts, verify quality holds, and see estimated savings."
+    "Before you switch LLM models in production, replay real prompts, verify quality holds, and see estimated savings.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="en" className={`${sans.variable} ${display.variable}`}>
+    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen font-sans antialiased">{children}</body>
     </html>
   );

@@ -4,7 +4,7 @@ import type { ProjectRecord } from "../lib/types";
 export function ProjectSelector({
   projects,
   projectId,
-  onChange
+  onChange,
 }: {
   projects: ProjectRecord[];
   projectId: string;
@@ -18,7 +18,7 @@ export function ProjectSelector({
     <div className="relative">
       <FolderKanban className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       <select
-        className="h-9 min-w-[11rem] appearance-none rounded-xl border border-border bg-card py-0 pl-9 pr-9 text-sm font-semibold text-foreground shadow-panel outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/15"
+        className="h-9 min-w-[11rem] appearance-none rounded-lg border border-border bg-muted/50 py-0 pl-9 pr-9 text-xs font-medium text-foreground shadow-panel outline-none transition hover:border-white/15 focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
         value={projectId}
         onChange={(event) => onChange(event.target.value)}
         aria-label="Select project"
