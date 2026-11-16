@@ -19,8 +19,8 @@ import { cn } from "../../lib/utils";
 
 const verdictStyles: Record<ReplayVerdict, string> = {
   pass: "bg-primary/10 text-primary ring-primary/20",
-  borderline: "bg-amber-50 text-amber-900 ring-amber-200/80",
-  fail: "bg-red-50 text-red-800 ring-red-200/80",
+  borderline: "bg-amber-400/10 text-amber-300 ring-amber-400/20",
+  fail: "bg-red-400/10 text-red-300 ring-red-400/20",
 };
 
 function verdictLabel(verdict: ReplayVerdict) {

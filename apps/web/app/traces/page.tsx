@@ -32,7 +32,10 @@ export default function TracesPage() {
 
         {workspace.ready && !workspace.token ? (
           <p className="text-sm text-muted-foreground">
-            <Link className="font-semibold text-primary hover:underline" href="/login">
+            <Link
+              className="font-semibold text-primary hover:underline"
+              href="/login"
+            >
               Sign in
             </Link>{" "}
             to view traces.

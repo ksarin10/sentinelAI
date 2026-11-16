@@ -14,7 +14,11 @@ import { useProjectWorkspace } from "../../lib/use-project-workspace";
 
 export default function TasksPage() {
   const workspace = useProjectWorkspace();
-  const taskSummaries = buildTaskSummaries(workspace.taskModels, workspace.recommendations, workspace.verifications);
+  const taskSummaries = buildTaskSummaries(
+    workspace.taskModels,
+    workspace.recommendations,
+    workspace.verifications,
+  );
 
   return (
     <AppShell>
@@ -35,12 +39,17 @@ export default function TasksPage() {
           />
         </PageHeader>
 
-        {workspace.error ? <AlertBanner variant="error">{workspace.error}</AlertBanner> : null}
+        {workspace.error ? (
+          <AlertBanner variant="error">{workspace.error}</AlertBanner>
+        ) : null}
 
         {taskSummaries.length === 0 ? (
           <AlertBanner>
             Need more traces.{" "}
-            <Link href="/settings" className="font-semibold text-primary hover:underline">
+            <Link
+              href="/settings"
+              className="font-semibold text-primary hover:underline"
+            >
               Load demo data
             </Link>
             .
@@ -50,28 +59,48 @@ export default function TasksPage() {
             {taskSummaries.map((task) => (
               <article
                 key={task.taskName}
-                className="rounded-2xl border border-border bg-card p-6 shadow-panel transition hover:shadow-lift"
+                className="group rounded-xl border border-border bg-card p-5 shadow-panel transition duration-200 hover:-translate-y-0.5 hover:border-white/15 hover:shadow-lift sm:p-6"
               >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <h2 className="font-display text-xl tracking-tight">{task.taskName}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{task.statusLabel}</p>
+                    <h2 className="font-mono text-base font-medium tracking-[-0.02em] text-foreground">
+                      {task.taskName}
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {task.statusLabel}
+                    </p>
                   </div>
-                  {task.recommendation ? <SwitchStatusBadge status={task.recommendation.switchStatus} size="lg" /> : null}
+                  {task.recommendation ? (
+                    <SwitchStatusBadge
+                      status={task.recommendation.switchStatus}
+                      size="lg"
+                    />
+                  ) : null}
                 </div>
 
                 <dl className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
                   {[
                     { label: "Model", value: task.model },
-                    { label: "Traces", value: task.traceCount.toLocaleString() },
-                    { label: "Avg cost", value: `$${task.averageCostUsd.toFixed(4)}` },
-                    { label: "Avg latency", value: `${Math.round(task.averageLatencyMs)} ms` }
+                    {
+                      label: "Traces",
+                      value: task.traceCount.toLocaleString(),
+                    },
+                    {
+                      label: "Avg cost",
+                      value: `$${task.averageCostUsd.toFixed(4)}`,
+                    },
+                    {
+                      label: "Avg latency",
+                      value: `${Math.round(task.averageLatencyMs)} ms`,
+                    },
                   ].map((item) => (
                     <div key={item.label}>
                       <dt className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                         {item.label}
                       </dt>
-                      <dd className="mt-1 font-semibold tabular-nums">{item.value}</dd>
+                      <dd className="mt-1 font-semibold tabular-nums">
+                        {item.value}
+                      </dd>
                     </div>
                   ))}
                 </dl>
@@ -83,13 +112,16 @@ export default function TasksPage() {
                       to={task.recommendation.recommendedModel}
                     />
                     <span className="text-sm font-bold text-primary">
-                      {task.recommendation.estimatedSavingsPercent}% est. savings
+                      {task.recommendation.estimatedSavingsPercent}% est.
+                      savings
                     </span>
                   </div>
                 ) : null}
 
                 <div className="mt-5">
-                  <Link href={`/verification?task=${encodeURIComponent(task.taskName)}`}>
+                  <Link
+                    href={`/verification?task=${encodeURIComponent(task.taskName)}`}
+                  >
                     <Button variant="secondary" size="sm">
                       Open verification
                     </Button>

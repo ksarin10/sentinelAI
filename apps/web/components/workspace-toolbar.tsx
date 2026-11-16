@@ -13,7 +13,7 @@ export function WorkspaceToolbar({
   onRunVerification,
   verificationBusy,
   showVerification = true,
-  refreshDisabled
+  refreshDisabled,
 }: {
   projects: ProjectRecord[];
   projectId: string;
@@ -26,15 +26,28 @@ export function WorkspaceToolbar({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ProjectSelector projects={projects} projectId={projectId} onChange={onProjectChange} />
+      <ProjectSelector
+        projects={projects}
+        projectId={projectId}
+        onChange={onProjectChange}
+      />
       {onRefresh ? (
-        <Button variant="secondary" size="sm" onClick={onRefresh} disabled={refreshDisabled || verificationBusy}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onRefresh}
+          disabled={refreshDisabled || verificationBusy}
+        >
           <RefreshCw className="h-4 w-4" />
           <span className="hidden sm:inline">Refresh</span>
         </Button>
       ) : null}
       {showVerification && onRunVerification ? (
-        <Button size="sm" onClick={onRunVerification} disabled={!projectId || verificationBusy}>
+        <Button
+          size="sm"
+          onClick={onRunVerification}
+          disabled={!projectId || verificationBusy}
+        >
           {verificationBusy ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (

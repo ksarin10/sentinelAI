@@ -10,11 +10,24 @@ import { Panel } from "../../components/panel";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { apiRequest } from "../../lib/api";
-import { getSelectedProjectId, getToken, saveSelectedProjectId } from "../../lib/auth";
-import type { ApiKeyRecord, ProjectRecord, ProviderCredentialRecord, TaskProfileRecord } from "../../lib/types";
+import {
+  getSelectedProjectId,
+  getToken,
+  saveSelectedProjectId,
+} from "../../lib/auth";
+import type {
+  ApiKeyRecord,
+  ProjectRecord,
+  ProviderCredentialRecord,
+  TaskProfileRecord,
+} from "../../lib/types";
 
 function slugify(value: string) {
-  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 export default function SettingsPage() {
@@ -23,7 +36,9 @@ export default function SettingsPage() {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [name, setName] = useState("");
   const [providerApiKey, setProviderApiKey] = useState("");
-  const [providerCredentials, setProviderCredentials] = useState<ProviderCredentialRecord[]>([]);
+  const [providerCredentials, setProviderCredentials] = useState<
+    ProviderCredentialRecord[]
+  >([]);
   const [taskProfiles, setTaskProfiles] = useState<TaskProfileRecord[]>([]);
   const [taskName, setTaskName] = useState("support.answer");
   const [taskQualityThreshold, setTaskQualityThreshold] = useState("0.8");
@@ -34,7 +49,8 @@ export default function SettingsPage() {
   const [seedingDemo, setSeedingDemo] = useState(false);
   const [token, setToken] = useState<string | null>(null);
 
-  const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
+  const selectedProject =
+    projects.find((project) => project.id === selectedProjectId) ?? projects[0];
 
   async function load(authToken: string | null = token) {
     if (!authToken) {
@@ -44,16 +60,24 @@ export default function SettingsPage() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiRequest<ProjectRecord[]>("/projects", { token: authToken });
+      const data = await apiRequest<ProjectRecord[]>("/projects", {
+        token: authToken,
+      });
       setProjects(data);
       const saved = getSelectedProjectId();
-      const nextId = data.find((project) => project.id === saved)?.id ?? data[0]?.id ?? "";
+      const nextId =
+        data.find((project) => project.id === saved)?.id ?? data[0]?.id ?? "";
       setSelectedProjectId(nextId);
       if (nextId) {
         saveSelectedProjectId(nextId);
         const [credentials, profiles] = await Promise.all([
-          apiRequest<ProviderCredentialRecord[]>(`/projects/${nextId}/provider-credentials`, { token: authToken }),
-          apiRequest<TaskProfileRecord[]>(`/projects/${nextId}/task-profiles`, { token: authToken })
+          apiRequest<ProviderCredentialRecord[]>(
+            `/projects/${nextId}/provider-credentials`,
+            { token: authToken },
+          ),
+          apiRequest<TaskProfileRecord[]>(`/projects/${nextId}/task-profiles`, {
+            token: authToken,
+          }),
         ]);
         setProviderCredentials(credentials);
         setTaskProfiles(profiles);
@@ -77,7 +101,7 @@ export default function SettingsPage() {
     await apiRequest<ProjectRecord>("/projects", {
       token,
       method: "POST",
-      body: { name, slug: slugify(name), description: "SentinelAI workspace" }
+      body: { name, slug: slugify(name), description: "SentinelAI workspace" },
     });
     setName("");
     await load(token);
@@ -89,7 +113,7 @@ export default function SettingsPage() {
     await apiRequest(`/projects/${selectedProject.id}/provider-credentials`, {
       token,
       method: "POST",
-      body: { provider: "openai", apiKey: providerApiKey }
+      body: { provider: "openai", apiKey: providerApiKey },
     });
     setProviderApiKey("");
     setNotice("OpenAI key saved for shadow replay verification.");
@@ -106,8 +130,8 @@ export default function SettingsPage() {
         taskName,
         riskLevel: "MEDIUM",
         qualityThreshold: Number(taskQualityThreshold),
-        optimizationGoal: "REDUCE_COST"
-      }
+        optimizationGoal: "REDUCE_COST",
+      },
     });
     setNotice(`Saved verification threshold for ${taskName}.`);
     await load(token);
@@ -117,11 +141,16 @@ export default function SettingsPage() {
     if (!token || !selectedProject) return;
     setSeedingDemo(true);
     try {
-      const result = await apiRequest<{ tracesCreated: number }>(`/projects/${selectedProject.id}/seed-demo-analytics`, {
-        token,
-        method: "POST"
-      });
-      setNotice(`Loaded ${result.tracesCreated} demo traces. Open Overview and run verification.`);
+      const result = await apiRequest<{ tracesCreated: number }>(
+        `/projects/${selectedProject.id}/seed-demo-analytics`,
+        {
+          token,
+          method: "POST",
+        },
+      );
+      setNotice(
+        `Loaded ${result.tracesCreated} demo traces. Open Overview and run verification.`,
+      );
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load demo data");
@@ -136,7 +165,7 @@ export default function SettingsPage() {
     await apiRequest<ApiKeyRecord>(`/projects/${selectedProject.id}/api-keys`, {
       token,
       method: "POST",
-      body: { name: keyName }
+      body: { name: keyName },
     });
     setNotice("Ingestion API key created.");
     await load(token);
@@ -156,7 +185,13 @@ export default function SettingsPage() {
 
         <Panel title="Project">
           <form className="flex flex-wrap gap-3" onSubmit={createProject}>
-            <Input className="max-w-xs" value={name} onChange={(e) => setName(e.target.value)} placeholder="My AI product" required />
+            <Input
+              className="max-w-xs"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="My AI product"
+              required
+            />
             <Button disabled={!token} size="sm">
               <Plus className="h-4 w-4" />
               Create
@@ -204,15 +239,26 @@ export default function SettingsPage() {
               {providerCredentials
                 .filter((c) => c.provider === "openai")
                 .map((c) => (
-                  <p key={c.provider} className="mt-3 text-sm text-muted-foreground">
+                  <p
+                    key={c.provider}
+                    className="mt-3 text-sm text-muted-foreground"
+                  >
                     Saved: {c.keyHint}
                   </p>
                 ))}
             </Panel>
 
-            <Panel title="Quality threshold" description="Replays pass when semantic score meets this floor.">
+            <Panel
+              title="Quality threshold"
+              description="Replays pass when semantic score meets this floor."
+            >
               <form className="flex flex-wrap gap-3" onSubmit={saveTaskProfile}>
-                <Input value={taskName} onChange={(e) => setTaskName(e.target.value)} placeholder="support.answer" className="max-w-[200px]" />
+                <Input
+                  value={taskName}
+                  onChange={(e) => setTaskName(e.target.value)}
+                  placeholder="support.answer"
+                  className="max-w-[200px]"
+                />
                 <Input
                   type="number"
                   min="0"
@@ -227,7 +273,10 @@ export default function SettingsPage() {
                 </Button>
               </form>
               {taskProfiles.map((profile) => (
-                <p key={profile.id} className="mt-3 text-sm text-muted-foreground">
+                <p
+                  key={profile.id}
+                  className="mt-3 text-sm text-muted-foreground"
+                >
                   {profile.taskName}: quality ≥ {profile.qualityThreshold}
                 </p>
               ))}
@@ -235,20 +284,30 @@ export default function SettingsPage() {
 
             <Panel title="Ingestion API key">
               <form className="flex flex-wrap gap-3" onSubmit={createApiKey}>
-                <Input value={keyName} onChange={(e) => setKeyName(e.target.value)} className="max-w-xs flex-1" />
+                <Input
+                  value={keyName}
+                  onChange={(e) => setKeyName(e.target.value)}
+                  className="max-w-xs flex-1"
+                />
                 <Button size="sm">Create key</Button>
               </form>
             </Panel>
 
-            <div className="rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[0.08] to-card p-6 shadow-panel">
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.045] p-6 shadow-panel">
               <div className="flex items-center gap-2">
                 <Database className="h-5 w-5 text-primary" />
                 <h2 className="text-base font-semibold">Demo walkthrough</h2>
               </div>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                Loads SupportBot Demo: 14 support.answer traces on gpt-4.1, then verify gpt-4.1-mini in simulate mode.
+                Loads SupportBot Demo: 14 support.answer traces on gpt-4.1, then
+                verify gpt-4.1-mini in simulate mode.
               </p>
-              <Button className="mt-4" variant="secondary" onClick={seedDemo} disabled={seedingDemo}>
+              <Button
+                className="mt-4"
+                variant="secondary"
+                onClick={seedDemo}
+                disabled={seedingDemo}
+              >
                 {seedingDemo ? "Loading…" : "Load demo traffic"}
               </Button>
             </div>
@@ -259,7 +318,9 @@ export default function SettingsPage() {
           <RefreshCw className="h-4 w-4" />
           Refresh
         </Button>
-        {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : null}
       </div>
     </AppShell>
   );

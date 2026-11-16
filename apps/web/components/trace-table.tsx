@@ -4,24 +4,41 @@ import type { TraceRecord } from "../lib/types";
 import { Panel } from "./panel";
 
 function latestRisk(trace: TraceRecord) {
-  const score = trace.evaluations?.[0]?.scores?.find((item) => item.metric === "hallucination_risk")?.score;
+  const score = trace.evaluations?.[0]?.scores?.find(
+    (item) => item.metric === "hallucination_risk",
+  )?.score;
   if (score == null) {
     return { label: "Pending", className: "bg-muted text-muted-foreground" };
   }
   if (score >= 0.6) {
-    return { label: "High", className: "bg-red-50 text-red-700 ring-1 ring-red-200/80" };
+    return {
+      label: "High",
+      className: "bg-red-400/10 text-red-300 ring-1 ring-red-400/20",
+    };
   }
   if (score >= 0.3) {
-    return { label: "Medium", className: "bg-amber-50 text-amber-800 ring-1 ring-amber-200/80" };
+    return {
+      label: "Medium",
+      className: "bg-amber-400/10 text-amber-300 ring-1 ring-amber-400/20",
+    };
   }
-  return { label: "Low", className: "bg-primary/10 text-primary ring-1 ring-primary/20" };
+  return {
+    label: "Low",
+    className: "bg-primary/10 text-primary ring-1 ring-primary/20",
+  };
 }
 
 function displayModel(model: string) {
   return model.replace(/-\d{4}-\d{2}-\d{2}$/, "");
 }
 
-export function TraceTable({ traces, projectId }: { traces: TraceRecord[]; projectId?: string }) {
+export function TraceTable({
+  traces,
+  projectId,
+}: {
+  traces: TraceRecord[];
+  projectId?: string;
+}) {
   return (
     <Panel
       title="Production traces"
@@ -35,7 +52,8 @@ export function TraceTable({ traces, projectId }: { traces: TraceRecord[]; proje
     >
       {traces.length === 0 ? (
         <p className="px-6 py-8 text-sm text-muted-foreground">
-          No traces yet. Send traffic with the SDK or POST /api/ingest/traces using a project API key.
+          No traces yet. Send traffic with the SDK or POST /api/ingest/traces
+          using a project API key.
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -68,10 +86,16 @@ export function TraceTable({ traces, projectId }: { traces: TraceRecord[]; proje
                       {displayModel(trace.model)}
                     </td>
                     <td className="tabular-nums">{trace.latencyMs} ms</td>
-                    <td className="tabular-nums">{trace.totalTokens.toLocaleString()}</td>
-                    <td className="tabular-nums">${Number(trace.costUsd).toFixed(4)}</td>
+                    <td className="tabular-nums">
+                      {trace.totalTokens.toLocaleString()}
+                    </td>
+                    <td className="tabular-nums">
+                      ${Number(trace.costUsd).toFixed(4)}
+                    </td>
                     <td>
-                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${risk.className}`}>
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${risk.className}`}
+                      >
                         {risk.label}
                       </span>
                     </td>
